@@ -90,10 +90,24 @@
         <div class="dialog-header"><h2 id="dialogTitle">Add an item</h2><button value="cancel" aria-label="Close">×</button></div>
         <label>NAME<input id="itemName" required placeholder="e.g. Internet" /></label>
         <label>AMOUNT<input id="itemAmount" required type="number" step="0.01" placeholder="0.00" /></label>
+        <div id="recurrenceFields">
+          <label>FREQUENCY
+            <select id="itemFrequency">
+              <option value="daily">Daily</option>
+              <option value="twice-weekly">Twice a week</option>
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Biweekly</option>
+              <option value="monthly" selected>Monthly</option>
+              <option value="custom-months">Every __ months</option>
+              <option value="custom-weeks">Every __ weeks</option>
+            </select>
+          </label>
+          <label id="intervalField" hidden><span id="intervalLabel">NUMBER OF MONTHS</span><input id="itemInterval" type="number" min="1" step="1" value="2" inputmode="numeric" /></label>
+        </div>
         <div class="dialog-actions"><button value="cancel" class="button button-light">CANCEL</button><button value="default" class="button button-dark" id="saveItem">SAVE ITEM</button></div>
       </form>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260810-3"></script>
+    <script src="app.js?v=20260810-5"></script>
   </body>
 </html>
