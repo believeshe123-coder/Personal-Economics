@@ -1,9 +1,9 @@
 const recurring = [
-  { name: 'Pay', amount: 1250, meta: 'Biweekly • Next: Aug 13', color: '#14a467' },
-  { name: 'Rent', amount: -1150, meta: 'Monthly • Next: Aug 28', color: '#3759f0' },
-  { name: 'Insurance', amount: -2000, meta: 'Every 6 months • Next: Aug 15', color: '#eaa81d' },
-  { name: 'Electric bill', amount: -200, meta: 'Monthly • Next: Sep 10', color: '#f05f85' },
-  { name: 'Weekly spending', amount: -150, meta: 'Weekly • Next: Aug 11', color: '#8b55df' }
+  { name: 'Pay', amount: 1250, frequency: 'biweekly', next: 'Next: Aug 13', color: '#14a467' },
+  { name: 'Rent', amount: -1150, frequency: 'monthly', next: 'Next: Aug 28', color: '#3759f0' },
+  { name: 'Insurance', amount: -2000, frequency: 'custom-months', interval: 6, next: 'Next: Aug 15', color: '#eaa81d' },
+  { name: 'Electric bill', amount: -200, frequency: 'monthly', next: 'Next: Sep 10', color: '#f05f85' },
+  { name: 'Weekly spending', amount: -150, frequency: 'weekly', next: 'Next: Aug 11', color: '#8b55df' }
 ];
 const variables = [
   { name: 'Overtime pay audit', amount: 819.74, meta: 'Jul 1, 2026', color: '#14a467' },
@@ -14,10 +14,19 @@ const transactions = [
   ['Jul 2', 'Pay', 1250, 4103.56], ['Jul 7', 'Weekly spending', -150, 3953.56],
   ['Jul 10', 'Electric bill', -200, 3753.56], ['Jul 14', 'Weekly spending', -150, 3603.56]
 ];
+const frequencyLabels = {
+  daily: 'Daily',
+  'twice-weekly': 'Twice a week',
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
+  monthly: 'Monthly'
+};
 const money = value => `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+const escapeHTML = value => String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
 function renderCards(items, target) {
-  document.getElementById(target).innerHTML = items.map(item => `<article class="item-card" style="--card-color:${item.color}"><div class="item-top"><span>${item.name}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${item.meta}</small></article>`).join('');
+  const editable = target === 'recurringList';
+  document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${item.color}"><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(item.meta || `${formatFrequency(item)} • ${item.next || 'Upcoming'}`)}</small>${editable ? `<div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div>` : ''}</article>`).join('');
 }
 function renderTransactions() {
   document.getElementById('transactionRows').innerHTML = transactions.map(row => `<tr><td>${row[0]}, 2026</td><td>${row[1]}</td><td class="${row[2] >= 0 ? 'positive' : 'negative'}">${money(row[2])}</td><td>${money(row[3])}</td></tr>`).join('');
@@ -71,9 +80,36 @@ renderCards(recurring,'recurringList'); renderCards(variables,'variableList'); r
 
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');drawChart(Number(button.dataset.range));}));
 const dialog=document.getElementById('itemDialog'); let itemType='recurring';
-function openDialog(type){itemType=type;document.getElementById('dialogTitle').textContent=type==='recurring'?'Add recurring item':'Add one-time change';document.getElementById('itemForm').reset();dialog.showModal();}
+const frequencySelect = document.getElementById('itemFrequency');
+const intervalField = document.getElementById('intervalField');
+const intervalInput = document.getElementById('itemInterval');
+let editingRecurringIndex = null;
+function updateIntervalField() {
+  const unit = frequencySelect.value === 'custom-months' ? 'months' : frequencySelect.value === 'custom-weeks' ? 'weeks' : '';
+  intervalField.hidden = !unit;
+  intervalInput.required = Boolean(unit);
+  document.getElementById('intervalLabel').textContent = unit ? `NUMBER OF ${unit.toUpperCase()}` : '';
+}
+function formatFrequency(item) {
+  if (item.frequency === 'custom-months') return `Every ${item.interval} ${Number(item.interval) === 1 ? 'month' : 'months'}`;
+  if (item.frequency === 'custom-weeks') return `Every ${item.interval} ${Number(item.interval) === 1 ? 'week' : 'weeks'}`;
+  return frequencyLabels[item.frequency];
+}
+function openDialog(type, index=null){itemType=type;editingRecurringIndex=type==='recurring'?index:null;document.getElementById('dialogTitle').textContent=index===null?(type==='recurring'?'Add recurring item':'Add one-time change'):'Edit recurring item';document.getElementById('saveItem').textContent=index===null?'SAVE ITEM':'SAVE CHANGES';document.getElementById('itemForm').reset();document.getElementById('recurrenceFields').hidden=type!=='recurring';frequencySelect.value='monthly';intervalInput.value='2';if(index!==null){const item=recurring[index];document.getElementById('itemName').value=item.name;document.getElementById('itemAmount').value=item.amount;frequencySelect.value=item.frequency;intervalInput.value=item.interval||2;}updateIntervalField();dialog.showModal();}
 document.getElementById('addRecurring').addEventListener('click',()=>openDialog('recurring')); document.getElementById('addVariable').addEventListener('click',()=>openDialog('variable'));
-document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value,amount:Number(document.getElementById('itemAmount').value),meta:itemType==='recurring'?'Monthly • Upcoming':'Aug 10, 2026',color:'#3759f0'};(itemType==='recurring'?recurring:variables).push(item);renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');showToast('Item added to your forecast.');});
+frequencySelect.addEventListener('change', updateIntervalField);
+document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;if(editingRecurringIndex!==null){item.color=recurring[editingRecurringIndex].color;item.next=recurring[editingRecurringIndex].next;recurring[editingRecurringIndex]=item;}else recurring.push(item);}else variables.push({...item,meta:'Aug 10, 2026'});renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');showToast(editingRecurringIndex===null?'Item added to your forecast.':'Recurring item updated.');});
+document.getElementById('recurringList').addEventListener('click', event => {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+  const index = Number(button.dataset.index);
+  if (button.dataset.action === 'edit') openDialog('recurring', index);
+  if (button.dataset.action === 'delete' && window.confirm(`Delete ${recurring[index].name}?`)) {
+    recurring.splice(index, 1);
+    renderCards(recurring, 'recurringList');
+    showToast('Recurring item deleted.');
+  }
+});
 function showToast(message){const toast=document.getElementById('toast');toast.textContent=message;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}
 document.getElementById('auditButton').addEventListener('click',()=>showToast('Audit started — review your recent transactions.'));
 function changeCalendarMonth(offset) {
