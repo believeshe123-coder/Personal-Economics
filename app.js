@@ -14,6 +14,21 @@ const transactions = [
   ['Jul 2', 'Pay', 1250, 4103.56], ['Jul 7', 'Weekly spending', -150, 3953.56],
   ['Jul 10', 'Electric bill', -200, 3753.56], ['Jul 14', 'Weekly spending', -150, 3603.56]
 ];
+const calendarEvents = [
+  { date: '2026-06-30', name: 'Weekly spending', amount: -150 },
+  { date: '2026-07-01', name: 'Overtime pay audit', amount: 819.74 },
+  { date: '2026-07-02', name: 'Pay', amount: 1250 },
+  { date: '2026-07-07', name: 'Weekly spending', amount: -150 },
+  { date: '2026-07-10', name: 'Electric bill', amount: -200 },
+  { date: '2026-07-14', name: 'Weekly spending', amount: -150 },
+  { date: '2026-07-16', name: 'Unexpected repair', amount: -408.38 },
+  { date: '2026-07-28', name: 'Rent', amount: -1150 },
+  { date: '2026-08-11', name: 'Weekly spending', amount: -150 },
+  { date: '2026-08-13', name: 'Pay', amount: 1250 },
+  { date: '2026-08-15', name: 'Insurance', amount: -2000 },
+  { date: '2026-08-28', name: 'Rent', amount: -1150 },
+  { date: '2026-09-10', name: 'Electric bill', amount: -200 }
+];
 const money = value => `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
 function renderCards(items, target) {
@@ -22,13 +37,25 @@ function renderCards(items, target) {
 function renderTransactions() {
   document.getElementById('transactionRows').innerHTML = transactions.map(row => `<tr><td>${row[0]}, 2026</td><td>${row[1]}</td><td class="${row[2] >= 0 ? 'positive' : 'negative'}">${money(row[2])}</td><td>${money(row[3])}</td></tr>`).join('');
 }
+let calendarDate = new Date(2026, 6, 1);
+const isoDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 function renderCalendar() {
-  const events = { 1:['+ OVERTIME','income'], 2:['+ PAY','income'], 7:['− SPENDING',''], 10:['− ELECTRIC',''], 14:['− SPENDING',''], 16:['− REPAIR',''], 28:['− RENT',''] };
-  const cells = [];
-  for (let i=29;i<=30;i++) cells.push(`<div class="day muted">${i}</div>`);
-  for (let i=1;i<=31;i++) { const event=events[i]; cells.push(`<div class="day ${i===16?'today':''}">${i}${event?`<span class="event ${event[1]}">${event[0]}</span>`:''}</div>`); }
-  for (let i=1;i<=2;i++) cells.push(`<div class="day muted">${i}</div>`);
-  document.getElementById('calendarGrid').innerHTML=cells.join('');
+  const year = calendarDate.getFullYear(), month = calendarDate.getMonth();
+  const first = new Date(year, month, 1);
+  const gridStart = new Date(year, month, 1 - ((first.getDay() + 6) % 7));
+  const today = isoDate(new Date());
+  document.getElementById('calendarTitle').textContent = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const cells = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart); date.setDate(gridStart.getDate() + index);
+    const key = isoDate(date), muted = date.getMonth() !== month;
+    const events = calendarEvents.filter(event => event.date === key).map(event => {
+      const direction = event.amount >= 0 ? '+' : '−';
+      const label = `${direction} ${event.name.toUpperCase()}`;
+      return `<button class="event ${event.amount >= 0 ? 'income' : ''}" data-event-date="${key}" data-event-name="${event.name}" data-event-amount="${event.amount}" aria-label="${event.name}, ${money(event.amount)}">${label}</button>`;
+    }).join('');
+    return `<div class="day ${muted ? 'muted' : ''} ${key === today ? 'today' : ''}" data-date="${key}"><span aria-label="${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}">${date.getDate()}</span>${events}</div>`;
+  });
+  document.getElementById('calendarGrid').innerHTML = cells.join('');
 }
 function drawChart(months=12) {
   const svg=document.getElementById('balanceChart'), width=900, height=270, pad={l:55,r:24,t:22,b:35};
@@ -50,4 +77,16 @@ document.getElementById('addRecurring').addEventListener('click',()=>openDialog(
 document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value,amount:Number(document.getElementById('itemAmount').value),meta:itemType==='recurring'?'Monthly • Upcoming':'Aug 10, 2026',color:'#3759f0'};(itemType==='recurring'?recurring:variables).push(item);renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');showToast('Item added to your forecast.');});
 function showToast(message){const toast=document.getElementById('toast');toast.textContent=message;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}
 document.getElementById('auditButton').addEventListener('click',()=>showToast('Audit started — review your recent transactions.'));
-document.getElementById('prevMonth').addEventListener('click',()=>showToast('June 2026 loaded.'));document.getElementById('nextMonth').addEventListener('click',()=>showToast('August 2026 loaded.'));
+function changeCalendarMonth(offset) {
+  calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + offset, 1);
+  renderCalendar();
+}
+document.getElementById('prevMonth').addEventListener('click', () => changeCalendarMonth(-1));
+document.getElementById('nextMonth').addEventListener('click', () => changeCalendarMonth(1));
+document.getElementById('todayMonth').addEventListener('click', () => { const today = new Date(); calendarDate = new Date(today.getFullYear(), today.getMonth(), 1); renderCalendar(); });
+document.getElementById('calendarGrid').addEventListener('click', event => {
+  const item = event.target.closest('[data-event-date]');
+  if (!item) return;
+  const date = new Date(`${item.dataset.eventDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  showToast(`${item.dataset.eventName}: ${money(Number(item.dataset.eventAmount))} on ${date}.`);
+});
