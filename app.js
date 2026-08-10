@@ -82,3 +82,7 @@ function changeCalendarMonth(offset) {
 }
 document.getElementById('prevMonth').addEventListener('click', () => changeCalendarMonth(-1));
 document.getElementById('nextMonth').addEventListener('click', () => changeCalendarMonth(1));
+document.getElementById('todayMonth').addEventListener('click', () => {
+  calendarDate = startOfMonth(new Date());
+  renderCalendar();
+});
