@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Balance Block</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Balance Block home">
+        <span class="brand-mark">BB</span>
+        <span>BALANCE BLOCK</span>
+      </a>
+      <div class="header-actions">
+        <div class="current-balance"><span>Current balance</span><strong>$2,183.82</strong></div>
+        <button class="icon-button" aria-label="Open settings">⚙</button>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <aside class="panel constants-panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">CONSTANTS</p><h2>Recurring items</h2></div>
+          <button class="button button-dark" id="addRecurring">+ ADD</button>
+        </div>
+        <div id="recurringList" class="card-list"></div>
+        <button class="text-link">VIEW ALL RECURRING ITEMS <span>→</span></button>
+      </aside>
+
+      <section class="workspace">
+        <section class="panel chart-panel">
+          <div class="section-heading chart-title">
+            <div><p class="eyebrow">FORECAST</p><h1>Projected balance</h1></div>
+            <div class="metric-row">
+              <div class="metric"><span>LOW</span><strong>$2,033</strong></div>
+              <div class="metric accent"><span>HIGH</span><strong>$8,395</strong></div>
+            </div>
+          </div>
+          <div class="chart-controls">
+            <label>FROM <input type="date" value="2026-06-30" /></label>
+            <label>TO <input type="date" value="2027-06-30" /></label>
+            <div class="range-buttons" aria-label="Forecast range">
+              <button data-range="1">1M</button><button data-range="3">3M</button>
+              <button data-range="6">6M</button><button class="selected" data-range="12">1Y</button>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <svg id="balanceChart" viewBox="0 0 900 270" role="img" aria-label="Projected balance line graph"></svg>
+          </div>
+          <div class="chart-legend"><span><i class="legend-solid"></i> PROJECTED</span><span><i class="legend-dash"></i> TREND</span></div>
+        </section>
+
+        <section class="panel calendar-panel">
+          <div class="calendar-toolbar">
+            <div><p class="eyebrow">CALENDAR</p><h2>July 2026</h2></div>
+            <div><button class="square-button" id="prevMonth">←</button><button class="square-button" id="nextMonth">→</button></div>
+          </div>
+          <div class="weekdays"><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span></div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </section>
+
+        <section class="panel transactions-panel">
+          <div class="section-heading">
+            <div><p class="eyebrow">TIMELINE</p><h2>Upcoming activity</h2></div>
+            <button class="button button-light">EXPORT</button>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>DATE</th><th>DESCRIPTION</th><th>CHANGE</th><th>BALANCE</th></tr></thead><tbody id="transactionRows"></tbody></table></div>
+        </section>
+      </section>
+
+      <aside class="panel variables-panel">
+        <button class="audit-button" id="auditButton"><span class="audit-icon">✓</span><span><small>QUICK ACTION</small>AUDIT YOURSELF</span><b>→</b></button>
+        <div class="section-heading">
+          <div><p class="eyebrow">VARIABLES</p><h2>One-time changes</h2></div>
+          <button class="button button-dark" id="addVariable">+ ADD</button>
+        </div>
+        <div id="variableList" class="card-list"></div>
+        <button class="text-link">VIEW ALL ONE-TIME CHANGES <span>→</span></button>
+        <div class="tip-box"><strong>KEEP IT REAL.</strong><p>Review surprise spending weekly to keep your forecast honest.</p></div>
+      </aside>
+    </main>
+
+    <dialog id="itemDialog">
+      <form method="dialog" id="itemForm">
+        <div class="dialog-header"><h2 id="dialogTitle">Add an item</h2><button value="cancel" aria-label="Close">×</button></div>
+        <label>NAME<input id="itemName" required placeholder="e.g. Internet" /></label>
+        <label>AMOUNT<input id="itemAmount" required type="number" step="0.01" placeholder="0.00" /></label>
+        <div class="dialog-actions"><button value="cancel" class="button button-light">CANCEL</button><button value="default" class="button button-dark" id="saveItem">SAVE ITEM</button></div>
+      </form>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
