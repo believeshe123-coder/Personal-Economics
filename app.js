@@ -4,7 +4,6 @@ let activePageCode = localStorage.getItem(ACTIVE_PAGE_KEY) || '';
 let savedPage = activePageCode ? readPage(activePageCode) : null;
 let recurring = savedPage?.recurring || [];
 let variables = savedPage?.variables || [];
-const transactions = [];
 
 function readPage(code) {
   try { return JSON.parse(localStorage.getItem(pageKey(code)) || 'null'); }
@@ -44,8 +43,12 @@ function renderCards(items, target) {
   document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${item.color}"><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(isVariableList ? formatStartDate(item.date) : `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}</small><div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
 }
 function renderTransactions() {
-  document.getElementById('transactionRows').innerHTML = transactions.length
-    ? transactions.map(row => `<tr><td>${row[0]}</td><td>${row[1]}</td><td class="${row[2] >= 0 ? 'positive' : 'negative'}">${money(row[2])}</td><td>${money(row[3])}</td></tr>`).join('')
+  const from = parseDate(document.getElementById('forecastFrom').value);
+  const to = parseDate(document.getElementById('forecastTo').value);
+  const points = projectionPoints(from, to).slice(1);
+  const rows = points.flatMap(point => point.events.map(event => ({ ...event, date: point.date, balance: point.balance })));
+  document.getElementById('transactionRows').innerHTML = rows.length
+    ? rows.map(row => `<tr><td>${formatStartDate(isoDate(row.date))}</td><td>${escapeHTML(row.name)} <small>${row.type}</small></td><td class="${row.amount >= 0 ? 'positive' : 'negative'}">${money(row.amount)}</td><td>${money(row.balance)}</td></tr>`).join('')
     : '<tr><td colspan="4">No upcoming activity yet. Add a recurring item or one-time change to get started.</td></tr>';
 }
 const startOfMonth = date => new Date(date.getFullYear(), date.getMonth(), 1);
@@ -58,6 +61,8 @@ function renderCalendar() {
   const firstDay = new Date(year, month, 1);
   const mondayOffset = (firstDay.getDay() + 6) % 7;
   const gridStart = new Date(year, month, 1 - mondayOffset);
+  const gridEnd = addDays(gridStart, 41);
+  const calendarChanges = forecastChanges(gridStart, gridEnd, true);
   const today = isoDate(new Date());
 
   document.getElementById('calendarTitle').textContent = firstDay.toLocaleDateString('en-US', {
@@ -74,12 +79,15 @@ function renderCalendar() {
     if (date.getMonth() !== month) classes.push('muted');
     if (dateKey === today) classes.push('today');
 
-    return `<div class="${classes.join(' ')}" aria-label="${date.toLocaleDateString('en-US', {
+    const events = calendarChanges.get(dateKey)?.events || [];
+    const eventMarkup = events.length ? `<div class="day-events">${events.slice(0, 3).map(item => `<span class="day-event ${item.amount >= 0 ? 'positive' : ''}" title="${escapeHTML(item.name)}: ${money(item.amount)}">${escapeHTML(item.name)} ${money(item.amount)}</span>`).join('')}${events.length > 3 ? `<span class="day-event">+${events.length - 3} more</span>` : ''}</div>` : '';
+    const dayLabel = `${date.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
       year: 'numeric'
-    })}">${date.getDate()}</div>`;
+    })}${events.length ? `. ${events.map(item => `${item.name} ${money(item.amount)}`).join(', ')}` : ''}`;
+    return `<div class="${classes.join(' ')}" aria-label="${escapeHTML(dayLabel)}">${date.getDate()}${eventMarkup}</div>`;
   }).join('');
 }
 const startingBalanceInput = document.getElementById('startingBalance');
@@ -122,7 +130,7 @@ function nextOccurrence(item, start, occurrence) {
   return new Date(start.getFullYear(), month, Math.min(start.getDate(), lastDay));
 }
 
-function projectionPoints(from, to) {
+function forecastChanges(from, to, includeFrom = false) {
   const changes = new Map();
   const addChange = (date, item, type) => {
     const key = isoDate(date);
@@ -131,11 +139,16 @@ function projectionPoints(from, to) {
     change.events.push({ name: item.name, amount: item.amount, type });
     changes.set(key, change);
   };
-  recurring.forEach(item => recurringDates(item, addDays(from, 1), to).forEach(date => addChange(date, item, 'Recurring')));
+  recurring.forEach(item => recurringDates(item, includeFrom ? from : addDays(from, 1), to).forEach(date => addChange(date, item, 'Recurring')));
   variables.forEach(item => {
     const date = parseDate(item.date);
-    if (date > from && date <= to) addChange(date, item, 'One-time');
+    if ((includeFrom ? date >= from : date > from) && date <= to) addChange(date, item, 'One-time');
   });
+  return changes;
+}
+
+function projectionPoints(from, to) {
+  const changes = forecastChanges(from, to);
   let balance = getStartingBalance();
   return [{ date: from, balance, events: [{ name: 'Starting balance', amount: balance, type: 'Starting point' }] }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
     balance += change.amount;
@@ -195,22 +208,65 @@ function drawChart() {
     }));
     tooltip.setAttribute('visibility', 'visible');
   };
+  const openSelectedPoint = event => openPointDialog(points[Number(event.currentTarget.dataset.index)]);
   svg.querySelectorAll('.chart-point').forEach(point => {
     point.addEventListener('mouseenter', showTooltip); point.addEventListener('focus', showTooltip);
     point.addEventListener('mouseleave', () => tooltip.setAttribute('visibility', 'hidden')); point.addEventListener('blur', () => tooltip.setAttribute('visibility', 'hidden'));
+    point.addEventListener('click', openSelectedPoint);
+    point.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openSelectedPoint(event); }
+    });
   });
   document.getElementById('forecastLow').textContent = money(low);
   document.getElementById('forecastHigh').textContent = money(high);
   document.getElementById('headerBalance').textContent = money(getStartingBalance());
+  renderTransactions();
+  renderCalendar();
 }
 function renderPage() {
-  renderCards(recurring,'recurringList'); renderCards(variables,'variableList'); renderTransactions(); renderCalendar(); drawChart();
+  renderCards(recurring,'recurringList'); renderCards(variables,'variableList'); drawChart();
 }
 renderPage();
+
+const pointDialog = document.getElementById('pointDialog');
+const pointBalanceInput = document.getElementById('pointBalance');
+let selectedPoint = null;
+function updatePointChange() {
+  const newBalance = pointBalanceInput.valueAsNumber;
+  const difference = Number.isFinite(newBalance) && selectedPoint ? newBalance - selectedPoint.balance : 0;
+  document.getElementById('pointChange').textContent = Number.isFinite(newBalance) && selectedPoint
+    ? `${difference >= 0 ? 'Add' : 'Subtract'} ${money(Math.abs(difference))} from this date forward.`
+    : '';
+  return difference;
+}
+function openPointDialog(point) {
+  selectedPoint = point;
+  document.getElementById('pointDate').textContent = point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
+  document.getElementById('pointCurrentBalance').textContent = money(point.balance);
+  pointBalanceInput.value = point.balance.toFixed(2);
+  updatePointChange();
+  pointDialog.showModal();
+  pointBalanceInput.select();
+}
+pointBalanceInput.addEventListener('input', updatePointChange);
+document.getElementById('savePoint').addEventListener('click', event => {
+  if (!document.getElementById('pointForm').reportValidity()) { event.preventDefault(); return; }
+  const difference = Math.round(updatePointChange() * 100) / 100;
+  if (selectedPoint.events[0]?.type === 'Starting point') {
+    startingBalanceInput.value = pointBalanceInput.valueAsNumber.toFixed(2);
+  } else if (difference !== 0) {
+    variables.push({ name: 'Graph point adjustment', amount: difference, date: isoDate(selectedPoint.date), color: difference > 0 ? '#14a467' : '#f04444' });
+  }
+  savePage();
+  renderCards(variables, 'variableList');
+  drawChart();
+  showToast(difference === 0 ? 'Point was already at that balance.' : 'Forecast point updated.');
+});
 
 const welcomeDialog = document.getElementById('welcomeDialog');
 function enterPage() {
   document.body.classList.add('page-ready');
+  document.getElementById('headerPageCodeValue').textContent = activePageCode;
   if (welcomeDialog.open) welcomeDialog.close();
   renderPage();
 }
@@ -359,7 +415,26 @@ document.getElementById('todayMonth').addEventListener('click', () => {
   renderCalendar();
 });
 
+document.querySelectorAll('.collapse-button').forEach(button => {
+  const expandedLabel = button.getAttribute('aria-label');
+  button.addEventListener('click', () => {
+    const panel = button.closest('.panel');
+    const collapsed = panel.classList.toggle('is-collapsed');
+    button.setAttribute('aria-expanded', String(!collapsed));
+    button.setAttribute('aria-label', collapsed ? expandedLabel.replace('Minimize', 'Expand') : expandedLabel);
+    button.textContent = collapsed ? '+' : '−';
+  });
+});
+
 const settingsDialog = document.getElementById('settingsDialog');
+document.getElementById('headerPageCode').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(activePageCode);
+    showToast('Page code copied.');
+  } catch {
+    showToast(`Your page code is ${activePageCode}.`);
+  }
+});
 document.getElementById('openSettings').addEventListener('click', () => {
   document.getElementById('pageCode').textContent = activePageCode;
   settingsDialog.showModal();

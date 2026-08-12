@@ -13,6 +13,9 @@
         <span>BALANCE BLOCK</span>
       </a>
       <div class="header-actions">
+        <button type="button" class="page-code-button" id="headerPageCode" aria-label="Copy page code">
+          <span>PAGE CODE</span><strong id="headerPageCodeValue">—</strong><small>COPY</small>
+        </button>
         <div class="current-balance"><span>Starting balance</span><strong id="headerBalance">$0.00</strong></div>
         <button class="icon-button" id="openSettings" aria-label="Open settings">⚙</button>
       </div>
@@ -22,7 +25,7 @@
       <aside class="panel constants-panel">
         <div class="section-heading">
           <div><p class="eyebrow">CONSTANTS</p><h2>Recurring items</h2></div>
-          <button class="button button-dark" id="addRecurring">+ ADD</button>
+          <div class="section-actions"><button class="button button-dark" id="addRecurring">+ ADD</button><button type="button" class="collapse-button" aria-label="Minimize recurring items" aria-expanded="true">−</button></div>
         </div>
         <div id="recurringList" class="card-list"></div>
         <button class="text-link">VIEW ALL RECURRING ITEMS <span>→</span></button>
@@ -32,10 +35,10 @@
         <section class="panel chart-panel">
           <div class="section-heading chart-title">
             <div><p class="eyebrow">FORECAST</p><h1>Projected balance</h1></div>
-            <div class="metric-row">
+            <div class="section-actions"><div class="metric-row">
               <div class="metric"><span>LOW</span><strong id="forecastLow">$2,183.82</strong></div>
               <div class="metric accent"><span>HIGH</span><strong id="forecastHigh">$2,183.82</strong></div>
-            </div>
+            </div><button type="button" class="collapse-button" aria-label="Minimize projected balance" aria-expanded="true">−</button></div>
           </div>
           <div class="chart-controls">
             <label>STARTING BALANCE
@@ -61,6 +64,7 @@
               <button type="button" class="today-button" id="todayMonth">TODAY</button>
               <button type="button" class="square-button" id="prevMonth" aria-label="Previous month">←</button>
               <button type="button" class="square-button" id="nextMonth" aria-label="Next month">→</button>
+              <button type="button" class="collapse-button" aria-label="Minimize calendar" aria-expanded="true">−</button>
             </div>
           </div>
           <div class="weekdays"><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span></div>
@@ -70,7 +74,7 @@
         <section class="panel transactions-panel">
           <div class="section-heading">
             <div><p class="eyebrow">TIMELINE</p><h2>Upcoming activity</h2></div>
-            <button class="button button-light">EXPORT</button>
+            <div class="section-actions"><button class="button button-light">EXPORT</button><button type="button" class="collapse-button" aria-label="Minimize upcoming activity" aria-expanded="true">−</button></div>
           </div>
           <div class="table-wrap"><table><thead><tr><th>DATE</th><th>DESCRIPTION</th><th>CHANGE</th><th>BALANCE</th></tr></thead><tbody id="transactionRows"></tbody></table></div>
         </section>
@@ -80,7 +84,7 @@
         <button class="audit-button" id="auditButton"><span class="audit-icon">✓</span><span><small>QUICK ACTION</small>AUDIT YOURSELF</span><b>→</b></button>
         <div class="section-heading">
           <div><p class="eyebrow">VARIABLES</p><h2>One-time changes</h2></div>
-          <button class="button button-dark" id="addVariable">+ ADD</button>
+          <div class="section-actions"><button class="button button-dark" id="addVariable">+ ADD</button><button type="button" class="collapse-button" aria-label="Minimize one-time changes" aria-expanded="true">−</button></div>
         </div>
         <div id="variableList" class="card-list"></div>
         <button class="text-link">VIEW ALL ONE-TIME CHANGES <span>→</span></button>
@@ -109,6 +113,18 @@
           <label id="intervalField" hidden><span id="intervalLabel">NUMBER OF MONTHS</span><input id="itemInterval" type="number" min="1" step="1" value="2" inputmode="numeric" /></label>
         </div>
         <div class="dialog-actions"><button value="cancel" formnovalidate class="button button-light">CANCEL</button><button value="default" class="button button-dark" id="saveItem">SAVE ITEM</button></div>
+      </form>
+    </dialog>
+    <dialog id="pointDialog" class="point-dialog">
+      <form method="dialog" id="pointForm">
+        <div class="dialog-header"><div><p class="eyebrow">FORECAST POINT</p><h2>Adjust this point</h2></div><button value="cancel" formnovalidate aria-label="Close">×</button></div>
+        <p class="dialog-copy">Set the balance you want at this point. The forecast after this date will update by the same difference.</p>
+        <div class="point-summary"><span id="pointDate"></span><strong id="pointCurrentBalance"></strong></div>
+        <label>NEW BALANCE
+          <div class="money-input"><span>$</span><input id="pointBalance" required type="number" step="0.01" inputmode="decimal" /></div>
+        </label>
+        <p class="point-change" id="pointChange" aria-live="polite"></p>
+        <div class="dialog-actions"><button value="cancel" formnovalidate class="button button-light">CANCEL</button><button value="default" class="button button-dark" id="savePoint">UPDATE POINT</button></div>
       </form>
     </dialog>
     <dialog id="auditDialog" class="audit-dialog">
@@ -164,6 +180,6 @@
       </form>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260812-3"></script>
+    <script src="app.js?v=20260812-6"></script>
   </body>
 </html>
