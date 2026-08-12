@@ -65,7 +65,8 @@ function renderCalendar() {
     })}">${date.getDate()}</div>`;
   }).join('');
 }
-const currentBalance = 2183.82;
+const startingBalanceInput = document.getElementById('startingBalance');
+const getStartingBalance = () => Number.isFinite(startingBalanceInput.valueAsNumber) ? startingBalanceInput.valueAsNumber : 0;
 const parseDate = value => new Date(`${value}T00:00:00`);
 const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 const balanceAnchorDate = parseDate(document.getElementById('forecastFrom').value);
@@ -102,19 +103,22 @@ function nextOccurrence(item, start, occurrence) {
 
 function projectionPoints(from, to) {
   const changes = new Map();
-  const addChange = (date, amount) => {
+  const addChange = (date, item, type) => {
     const key = isoDate(date);
-    changes.set(key, (changes.get(key) || 0) + amount);
+    const change = changes.get(key) || { amount: 0, events: [] };
+    change.amount += item.amount;
+    change.events.push({ name: item.name, amount: item.amount, type });
+    changes.set(key, change);
   };
-  recurring.forEach(item => recurringDates(item, addDays(from, 1), to).forEach(date => addChange(date, item.amount)));
+  recurring.forEach(item => recurringDates(item, addDays(from, 1), to).forEach(date => addChange(date, item, 'Recurring')));
   variables.forEach(item => {
     const date = parseDate(item.date);
-    if (date > from && date <= to) addChange(date, item.amount);
+    if (date > from && date <= to) addChange(date, item, 'One-time');
   });
-  let balance = currentBalance;
-  return [{ date: from, balance }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
-    balance += change;
-    return { date: parseDate(date), balance };
+  let balance = getStartingBalance();
+  return [{ date: from, balance, events: [{ name: 'Starting balance', amount: balance, type: 'Starting point' }] }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
+    balance += change.amount;
+    return { date: parseDate(date), balance, events: change.events };
   })];
 }
 
@@ -143,18 +147,31 @@ function drawChart() {
   const line = points.map(point => `${x(point.date)},${y(point.balance)}`).join(' ');
   html += `<line x1="${x(from)}" y1="${y(values[0])}" x2="${x(to)}" y2="${y(values.at(-1))}" stroke="#0a7d4f" stroke-width="2" stroke-dasharray="8 7"/><polyline points="${line}" fill="none" stroke="#151515" stroke-width="3"/>`;
   points.forEach((point, index) => {
-    const label = `${point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}: ${money(point.balance)}`;
-    html += `<circle class="chart-point" data-index="${index}" cx="${x(point.date)}" cy="${y(point.balance)}" r="4" fill="#fff" stroke="#3759f0" stroke-width="2" tabindex="0" role="img" aria-label="${label}"/>`;
+    const eventSummary = point.events.map(item => `${item.type} ${item.name} ${money(item.amount)}`).join(', ');
+    const label = `${point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}: ${eventSummary}. Balance ${money(point.balance)}`;
+    html += `<circle class="chart-point" data-index="${index}" cx="${x(point.date)}" cy="${y(point.balance)}" r="4" fill="#fff" stroke="#3759f0" stroke-width="2" tabindex="0" role="img" aria-label="${escapeHTML(label)}"/>`;
   });
-  html += '<g class="chart-tooltip" visibility="hidden"><rect width="154" height="42" rx="2"/><text x="8" y="16"></text><text x="8" y="32"></text></g>';
+  html += '<g class="chart-tooltip" visibility="hidden"><rect width="230" rx="2"/><text></text></g>';
   svg.innerHTML = html;
-  const tooltip = svg.querySelector('.chart-tooltip'), tooltipText = tooltip.querySelectorAll('text');
+  const tooltip = svg.querySelector('.chart-tooltip'), tooltipRect = tooltip.querySelector('rect'), tooltipText = tooltip.querySelector('text');
   const showTooltip = event => {
     const point = points[Number(event.currentTarget.dataset.index)], px = x(point.date), py = y(point.balance);
-    const tx = Math.min(width - 160, Math.max(4, px - 77)), ty = py < 65 ? py + 10 : py - 50;
+    const lines = [
+      point.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      ...point.events.map(item => `${item.type} — ${item.name}: ${money(item.amount)}`),
+      `Balance: ${money(point.balance)}`
+    ];
+    const tooltipHeight = 12 + lines.length * 16;
+    const tx = Math.min(width - 234, Math.max(4, px - 115)), ty = py < tooltipHeight + 12 ? py + 10 : py - tooltipHeight - 8;
     tooltip.setAttribute('transform', `translate(${tx} ${ty})`);
-    tooltipText[0].textContent = point.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    tooltipText[1].textContent = `Balance: ${money(point.balance)}`;
+    tooltipRect.setAttribute('height', tooltipHeight);
+    tooltipText.replaceChildren(...lines.map((line, index) => {
+      const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+      tspan.setAttribute('x', '8');
+      tspan.setAttribute('y', String(17 + index * 16));
+      tspan.textContent = line;
+      return tspan;
+    }));
     tooltip.setAttribute('visibility', 'visible');
   };
   svg.querySelectorAll('.chart-point').forEach(point => {
@@ -163,12 +180,14 @@ function drawChart() {
   });
   document.getElementById('forecastLow').textContent = money(low);
   document.getElementById('forecastHigh').textContent = money(high);
+  document.getElementById('headerBalance').textContent = money(getStartingBalance());
 }
 renderCards(recurring,'recurringList'); renderCards(variables,'variableList'); renderTransactions(); renderCalendar(); drawChart();
 
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');const from=parseDate(document.getElementById('forecastFrom').value);const month=from.getMonth()+Number(button.dataset.range);const lastDay=new Date(from.getFullYear(),month+1,0).getDate();const to=new Date(from.getFullYear(),month,Math.min(from.getDate(),lastDay));document.getElementById('forecastTo').value=isoDate(to);drawChart();}));
 document.getElementById('forecastFrom').addEventListener('change', drawChart);
 document.getElementById('forecastTo').addEventListener('change', drawChart);
+startingBalanceInput.addEventListener('input', drawChart);
 const dialog=document.getElementById('itemDialog'); let itemType='recurring';
 const frequencySelect = document.getElementById('itemFrequency');
 const intervalField = document.getElementById('intervalField');
@@ -224,9 +243,9 @@ function showToast(message){const toast=document.getElementById('toast');toast.t
 const auditDialog = document.getElementById('auditDialog');
 const auditActual = document.getElementById('auditActual');
 const auditResult = document.getElementById('auditResult');
-let expectedAuditBalance = currentBalance;
+let expectedAuditBalance = getStartingBalance();
 function balanceOn(date) {
-  if (date <= balanceAnchorDate) return currentBalance;
+  if (date <= balanceAnchorDate) return getStartingBalance();
   return projectionPoints(balanceAnchorDate, date).at(-1).balance;
 }
 function updateAuditResult() {
