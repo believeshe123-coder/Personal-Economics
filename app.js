@@ -6,8 +6,8 @@ const recurring = [
   { name: 'Weekly spending', amount: -150, frequency: 'weekly', start: '2026-08-11', color: '#8b55df' }
 ];
 const variables = [
-  { name: 'Overtime pay audit', amount: 819.74, meta: 'Jul 1, 2026', color: '#14a467' },
-  { name: 'Unexpected repair', amount: -408.38, meta: 'Jul 16, 2026', color: '#f04444' }
+  { name: 'Overtime pay audit', amount: 819.74, date: '2026-07-01', color: '#14a467' },
+  { name: 'Unexpected repair', amount: -408.38, date: '2026-07-16', color: '#f04444' }
 ];
 const transactions = [
   ['Jun 30', 'Weekly spending', -150, 2033.82], ['Jul 1', 'Overtime pay audit', 819.74, 2853.56],
@@ -25,8 +25,8 @@ const money = value => `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString
 const escapeHTML = value => String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
 function renderCards(items, target) {
-  const editable = target === 'recurringList';
-  document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${item.color}"><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(item.meta || `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}</small>${editable ? `<div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div>` : ''}</article>`).join('');
+  const isVariableList = target === 'variableList';
+  document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${item.color}"><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(isVariableList ? formatStartDate(item.date) : `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}</small><div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
 }
 function renderTransactions() {
   document.getElementById('transactionRows').innerHTML = transactions.map(row => `<tr><td>${row[0]}, 2026</td><td>${row[1]}</td><td class="${row[2] >= 0 ? 'positive' : 'negative'}">${money(row[2])}</td><td>${money(row[3])}</td></tr>`).join('');
@@ -84,7 +84,8 @@ const frequencySelect = document.getElementById('itemFrequency');
 const intervalField = document.getElementById('intervalField');
 const intervalInput = document.getElementById('itemInterval');
 const startInput = document.getElementById('itemStart');
-let editingRecurringIndex = null;
+const dateLabel = document.getElementById('itemDateLabel');
+let editingItemIndex = null;
 function updateIntervalField() {
   const unit = frequencySelect.value === 'custom-months' ? 'months' : frequencySelect.value === 'custom-weeks' ? 'weeks' : '';
   intervalField.hidden = !unit;
@@ -100,10 +101,10 @@ function formatStartDate(value) {
   if (!value) return 'on a date to be set';
   return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-function openDialog(type, index=null){itemType=type;editingRecurringIndex=type==='recurring'?index:null;document.getElementById('dialogTitle').textContent=index===null?(type==='recurring'?'Add recurring item':'Add one-time change'):'Edit recurring item';document.getElementById('saveItem').textContent=index===null?'SAVE ITEM':'SAVE CHANGES';document.getElementById('itemForm').reset();document.getElementById('recurrenceFields').hidden=type!=='recurring';startInput.required=type==='recurring';frequencySelect.value='monthly';intervalInput.value='2';startInput.value=isoDate(new Date());if(index!==null){const item=recurring[index];document.getElementById('itemName').value=item.name;document.getElementById('itemAmount').value=item.amount;frequencySelect.value=item.frequency;intervalInput.value=item.interval||2;startInput.value=item.start||isoDate(new Date());}updateIntervalField();dialog.showModal();}
+function openDialog(type, index=null){itemType=type;editingItemIndex=index;document.getElementById('dialogTitle').textContent=index===null?(type==='recurring'?'Add recurring item':'Add one-time change'):(type==='recurring'?'Edit recurring item':'Edit one-time change');document.getElementById('saveItem').textContent=index===null?'SAVE ITEM':'SAVE CHANGES';document.getElementById('itemForm').reset();document.getElementById('recurrenceFields').hidden=type!=='recurring';dateLabel.textContent=type==='recurring'?'STARTS':'OCCURS ON';frequencySelect.value='monthly';intervalInput.value='2';startInput.value=isoDate(new Date());if(index!==null){const item=(type==='recurring'?recurring:variables)[index];document.getElementById('itemName').value=item.name;document.getElementById('itemAmount').value=item.amount;startInput.value=(type==='recurring'?item.start:item.date)||isoDate(new Date());if(type==='recurring'){frequencySelect.value=item.frequency;intervalInput.value=item.interval||2;}}updateIntervalField();dialog.showModal();}
 document.getElementById('addRecurring').addEventListener('click',()=>openDialog('recurring')); document.getElementById('addVariable').addEventListener('click',()=>openDialog('variable'));
 frequencySelect.addEventListener('change', updateIntervalField);
-document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingRecurringIndex!==null){item.color=recurring[editingRecurringIndex].color;recurring[editingRecurringIndex]=item;}else recurring.push(item);}else variables.push({...item,meta:'Aug 10, 2026'});renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');showToast(editingRecurringIndex===null?'Item added to your forecast.':'Recurring item updated.');});
+document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingItemIndex!==null){item.color=recurring[editingItemIndex].color;recurring[editingItemIndex]=item;}else recurring.push(item);}else{item.date=startInput.value;if(editingItemIndex!==null){item.color=variables[editingItemIndex].color;variables[editingItemIndex]=item;}else variables.push(item);}renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');showToast(editingItemIndex===null?'Item added to your forecast.':itemType==='recurring'?'Recurring item updated.':'One-time change updated.');});
 document.getElementById('recurringList').addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
@@ -113,6 +114,17 @@ document.getElementById('recurringList').addEventListener('click', event => {
     recurring.splice(index, 1);
     renderCards(recurring, 'recurringList');
     showToast('Recurring item deleted.');
+  }
+});
+document.getElementById('variableList').addEventListener('click', event => {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+  const index = Number(button.dataset.index);
+  if (button.dataset.action === 'edit') openDialog('variable', index);
+  if (button.dataset.action === 'delete' && window.confirm(`Delete ${variables[index].name}?`)) {
+    variables.splice(index, 1);
+    renderCards(variables, 'variableList');
+    showToast('One-time change deleted.');
   }
 });
 function showToast(message){const toast=document.getElementById('toast');toast.textContent=message;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}
