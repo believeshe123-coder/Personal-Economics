@@ -68,6 +68,7 @@ function renderCalendar() {
 const currentBalance = 2183.82;
 const parseDate = value => new Date(`${value}T00:00:00`);
 const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+const balanceAnchorDate = parseDate(document.getElementById('forecastFrom').value);
 
 function recurringDates(item, from, to) {
   const dates = [];
@@ -219,7 +220,49 @@ document.getElementById('variableList').addEventListener('click', event => {
   }
 });
 function showToast(message){const toast=document.getElementById('toast');toast.textContent=message;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}
-document.getElementById('auditButton').addEventListener('click',()=>showToast('Audit started — review your recent transactions.'));
+
+const auditDialog = document.getElementById('auditDialog');
+const auditActual = document.getElementById('auditActual');
+const auditResult = document.getElementById('auditResult');
+let expectedAuditBalance = currentBalance;
+function balanceOn(date) {
+  if (date <= balanceAnchorDate) return currentBalance;
+  return projectionPoints(balanceAnchorDate, date).at(-1).balance;
+}
+function updateAuditResult() {
+  const hasValue = auditActual.value.trim() !== '' && Number.isFinite(auditActual.valueAsNumber);
+  const difference = hasValue ? Math.round((auditActual.valueAsNumber - expectedAuditBalance) * 100) / 100 : 0;
+  document.getElementById('auditDifference').textContent = money(difference);
+  auditResult.classList.toggle('over', hasValue && difference > 0);
+  auditResult.classList.toggle('under', hasValue && difference < 0);
+  document.getElementById('auditExplanation').textContent = !hasValue
+    ? 'Enter your current balance to see the adjustment.'
+    : difference === 0
+      ? 'You’re right on forecast. No adjustment is needed.'
+      : `You’re ${money(Math.abs(difference))} ${difference > 0 ? 'over' : 'under'} today’s forecast.`;
+  document.getElementById('saveAudit').disabled = !hasValue || difference === 0;
+  return difference;
+}
+document.getElementById('auditButton').addEventListener('click', () => {
+  const today = new Date();
+  expectedAuditBalance = balanceOn(today);
+  document.getElementById('auditDate').textContent = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+  document.getElementById('auditExpected').textContent = money(expectedAuditBalance);
+  auditActual.value = '';
+  updateAuditResult();
+  auditDialog.showModal();
+  auditActual.focus();
+});
+auditActual.addEventListener('input', updateAuditResult);
+document.getElementById('saveAudit').addEventListener('click', event => {
+  if (!document.getElementById('auditForm').reportValidity()) { event.preventDefault(); return; }
+  const difference = updateAuditResult();
+  if (difference === 0) { event.preventDefault(); return; }
+  variables.push({ name: 'Balance audit adjustment', amount: difference, date: isoDate(new Date()), color: difference > 0 ? '#14a467' : '#f04444' });
+  renderCards(variables, 'variableList');
+  drawChart();
+  showToast(`${money(Math.abs(difference))} ${difference > 0 ? 'credit' : 'charge'} added for today.`);
+});
 function changeCalendarMonth(offset) {
   calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + offset, 1);
   renderCalendar();
