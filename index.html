@@ -33,13 +33,13 @@
           <div class="section-heading chart-title">
             <div><p class="eyebrow">FORECAST</p><h1>Projected balance</h1></div>
             <div class="metric-row">
-              <div class="metric"><span>LOW</span><strong>$2,033</strong></div>
-              <div class="metric accent"><span>HIGH</span><strong>$8,395</strong></div>
+              <div class="metric"><span>LOW</span><strong id="forecastLow">$2,183.82</strong></div>
+              <div class="metric accent"><span>HIGH</span><strong id="forecastHigh">$2,183.82</strong></div>
             </div>
           </div>
           <div class="chart-controls">
-            <label>FROM <input type="date" value="2026-06-30" /></label>
-            <label>TO <input type="date" value="2027-06-30" /></label>
+            <label>FROM <input id="forecastFrom" type="date" value="2026-06-30" /></label>
+            <label>TO <input id="forecastTo" type="date" value="2027-06-30" /></label>
             <div class="range-buttons" aria-label="Forecast range">
               <button data-range="1">1M</button><button data-range="3">3M</button>
               <button data-range="6">6M</button><button class="selected" data-range="12">1Y</button>
