@@ -65,20 +65,109 @@ function renderCalendar() {
     })}">${date.getDate()}</div>`;
   }).join('');
 }
-function drawChart(months=12) {
-  const svg=document.getElementById('balanceChart'), width=900, height=270, pad={l:55,r:24,t:22,b:35};
-  const full=[2034,2854,4104,3954,3754,3604,4854,4704,3554,3404,3204,3054,4304,4154,4004,3854,3704,4954,4804,3654,3504,3354,4604,4454,4254,4104,3954,5204,5054,4904,4754,4554,5804,5654,4504,4354,4204,5454,5304,5104,4954,4804,6054,5904,5754,5604,5404,6654,6504,5354,5204,5054,6304,6154,6004,5854,5704,6954,6804,5654,5504,5354,6604,6454,6254,6104,5954,7204,7054,6904,6754,6554,7804,7654,6504,6354,6204,7454,7304,7154,7004,6854,8104,7954,7804,7654,7504,8395,8100,7650];
-  const values=full.slice(0,Math.max(10,Math.round(full.length*months/12))), max=9000;
-  const x=i=>pad.l+i*(width-pad.l-pad.r)/(values.length-1), y=v=>height-pad.b-v*(height-pad.t-pad.b)/max;
-  let html='';
-  [0,2000,4000,6000,8000].forEach(v=>{html+=`<line x1="${pad.l}" y1="${y(v)}" x2="${width-pad.r}" y2="${y(v)}" stroke="#c8c5bd" stroke-width="1"/><text x="8" y="${y(v)+4}" font-size="10" fill="#666">$${v/1000}k</text>`});
-  for(let i=0;i<=12;i++){const xx=pad.l+i*(width-pad.l-pad.r)/12;html+=`<line x1="${xx}" y1="${pad.t}" x2="${xx}" y2="${height-pad.b}" stroke="#e0ddd5"/><text x="${xx}" y="${height-12}" text-anchor="middle" font-size="9" fill="#666">${['JUL','AUG','SEP','OCT','NOV','DEC','JAN','FEB','MAR','APR','MAY','JUN','JUL'][i]}</text>`}
-  const points=values.map((v,i)=>`${x(i)},${y(v)}`).join(' '); html+=`<line x1="${x(0)}" y1="${y(2850)}" x2="${x(values.length-1)}" y2="${y(7600)}" stroke="#0a7d4f" stroke-width="2" stroke-dasharray="8 7"/><polyline points="${points}" fill="none" stroke="#151515" stroke-width="3"/>`;
-  values.forEach((v,i)=>{if(i%2===0)html+=`<rect x="${x(i)-3}" y="${y(v)-3}" width="6" height="6" fill="#fff" stroke="#3759f0" stroke-width="2"/>`}); svg.innerHTML=html;
+const currentBalance = 2183.82;
+const parseDate = value => new Date(`${value}T00:00:00`);
+const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+
+function recurringDates(item, from, to) {
+  const dates = [];
+  const start = parseDate(item.start);
+  if (Number.isNaN(start.getTime())) return dates;
+  let date = start;
+  let occurrence = 0;
+  while (date < from) {
+    occurrence += 1;
+    date = nextOccurrence(item, start, occurrence);
+  }
+  while (date <= to) {
+    dates.push(date);
+    occurrence += 1;
+    date = nextOccurrence(item, start, occurrence);
+  }
+  return dates;
+}
+
+function nextOccurrence(item, start, occurrence) {
+  if (item.frequency === 'daily') return addDays(start, occurrence);
+  if (item.frequency === 'twice-weekly') return addDays(start, Math.floor(occurrence / 2) * 7 + (occurrence % 2) * 3);
+  if (item.frequency === 'weekly') return addDays(start, occurrence * 7);
+  if (item.frequency === 'biweekly') return addDays(start, occurrence * 14);
+  if (item.frequency === 'custom-weeks') return addDays(start, occurrence * 7 * Math.max(1, item.interval));
+  const interval = item.frequency === 'custom-months' ? Math.max(1, item.interval) : 1;
+  const month = start.getMonth() + occurrence * interval;
+  const lastDay = new Date(start.getFullYear(), month + 1, 0).getDate();
+  return new Date(start.getFullYear(), month, Math.min(start.getDate(), lastDay));
+}
+
+function projectionPoints(from, to) {
+  const changes = new Map();
+  const addChange = (date, amount) => {
+    const key = isoDate(date);
+    changes.set(key, (changes.get(key) || 0) + amount);
+  };
+  recurring.forEach(item => recurringDates(item, addDays(from, 1), to).forEach(date => addChange(date, item.amount)));
+  variables.forEach(item => {
+    const date = parseDate(item.date);
+    if (date > from && date <= to) addChange(date, item.amount);
+  });
+  let balance = currentBalance;
+  return [{ date: from, balance }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
+    balance += change;
+    return { date: parseDate(date), balance };
+  })];
+}
+
+function drawChart() {
+  const svg = document.getElementById('balanceChart'), width = 900, height = 270, pad = { l: 62, r: 24, t: 22, b: 38 };
+  const from = parseDate(document.getElementById('forecastFrom').value);
+  const to = parseDate(document.getElementById('forecastTo').value);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) return;
+  const points = projectionPoints(from, to);
+  const values = points.map(point => point.balance);
+  const low = Math.min(...values), high = Math.max(...values);
+  const spread = Math.max(100, high - low), chartMin = Math.floor((low - spread * .12) / 500) * 500, chartMax = Math.ceil((high + spread * .12) / 500) * 500;
+  const duration = to - from;
+  const x = date => pad.l + (date - from) / duration * (width - pad.l - pad.r);
+  const y = value => height - pad.b - (value - chartMin) / (chartMax - chartMin) * (height - pad.t - pad.b);
+  const formatAxisMoney = value => `${value < 0 ? '-' : ''}$${Math.abs(value) >= 1000 ? `${(Math.abs(value) / 1000).toFixed(Math.abs(value) % 1000 ? 1 : 0)}k` : Math.abs(value)}`;
+  let html = '';
+  for (let i = 0; i <= 4; i += 1) {
+    const value = chartMin + (chartMax - chartMin) * i / 4;
+    html += `<line x1="${pad.l}" y1="${y(value)}" x2="${width-pad.r}" y2="${y(value)}" stroke="#c8c5bd"/><text x="8" y="${y(value)+4}" font-size="10" fill="#666">${formatAxisMoney(value)}</text>`;
+  }
+  for (let i = 0; i <= 6; i += 1) {
+    const date = new Date(from.getTime() + duration * i / 6), xx = x(date);
+    html += `<line x1="${xx}" y1="${pad.t}" x2="${xx}" y2="${height-pad.b}" stroke="#e0ddd5"/><text x="${xx}" y="${height-12}" text-anchor="middle" font-size="9" fill="#666">${date.toLocaleDateString('en-US', { month: 'short', day: duration < 1000*60*60*24*100 ? 'numeric' : undefined }).toUpperCase()}</text>`;
+  }
+  const line = points.map(point => `${x(point.date)},${y(point.balance)}`).join(' ');
+  html += `<line x1="${x(from)}" y1="${y(values[0])}" x2="${x(to)}" y2="${y(values.at(-1))}" stroke="#0a7d4f" stroke-width="2" stroke-dasharray="8 7"/><polyline points="${line}" fill="none" stroke="#151515" stroke-width="3"/>`;
+  points.forEach((point, index) => {
+    const label = `${point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}: ${money(point.balance)}`;
+    html += `<circle class="chart-point" data-index="${index}" cx="${x(point.date)}" cy="${y(point.balance)}" r="4" fill="#fff" stroke="#3759f0" stroke-width="2" tabindex="0" role="img" aria-label="${label}"/>`;
+  });
+  html += '<g class="chart-tooltip" visibility="hidden"><rect width="154" height="42" rx="2"/><text x="8" y="16"></text><text x="8" y="32"></text></g>';
+  svg.innerHTML = html;
+  const tooltip = svg.querySelector('.chart-tooltip'), tooltipText = tooltip.querySelectorAll('text');
+  const showTooltip = event => {
+    const point = points[Number(event.currentTarget.dataset.index)], px = x(point.date), py = y(point.balance);
+    const tx = Math.min(width - 160, Math.max(4, px - 77)), ty = py < 65 ? py + 10 : py - 50;
+    tooltip.setAttribute('transform', `translate(${tx} ${ty})`);
+    tooltipText[0].textContent = point.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    tooltipText[1].textContent = `Balance: ${money(point.balance)}`;
+    tooltip.setAttribute('visibility', 'visible');
+  };
+  svg.querySelectorAll('.chart-point').forEach(point => {
+    point.addEventListener('mouseenter', showTooltip); point.addEventListener('focus', showTooltip);
+    point.addEventListener('mouseleave', () => tooltip.setAttribute('visibility', 'hidden')); point.addEventListener('blur', () => tooltip.setAttribute('visibility', 'hidden'));
+  });
+  document.getElementById('forecastLow').textContent = money(low);
+  document.getElementById('forecastHigh').textContent = money(high);
 }
 renderCards(recurring,'recurringList'); renderCards(variables,'variableList'); renderTransactions(); renderCalendar(); drawChart();
 
-document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');drawChart(Number(button.dataset.range));}));
+document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');const from=parseDate(document.getElementById('forecastFrom').value);const month=from.getMonth()+Number(button.dataset.range);const lastDay=new Date(from.getFullYear(),month+1,0).getDate();const to=new Date(from.getFullYear(),month,Math.min(from.getDate(),lastDay));document.getElementById('forecastTo').value=isoDate(to);drawChart();}));
+document.getElementById('forecastFrom').addEventListener('change', drawChart);
+document.getElementById('forecastTo').addEventListener('change', drawChart);
 const dialog=document.getElementById('itemDialog'); let itemType='recurring';
 const frequencySelect = document.getElementById('itemFrequency');
 const intervalField = document.getElementById('intervalField');
@@ -104,7 +193,7 @@ function formatStartDate(value) {
 function openDialog(type, index=null){itemType=type;editingItemIndex=index;document.getElementById('dialogTitle').textContent=index===null?(type==='recurring'?'Add recurring item':'Add one-time change'):(type==='recurring'?'Edit recurring item':'Edit one-time change');document.getElementById('saveItem').textContent=index===null?'SAVE ITEM':'SAVE CHANGES';document.getElementById('itemForm').reset();document.getElementById('recurrenceFields').hidden=type!=='recurring';dateLabel.textContent=type==='recurring'?'STARTS':'OCCURS ON';frequencySelect.value='monthly';intervalInput.value='2';startInput.value=isoDate(new Date());if(index!==null){const item=(type==='recurring'?recurring:variables)[index];document.getElementById('itemName').value=item.name;document.getElementById('itemAmount').value=item.amount;startInput.value=(type==='recurring'?item.start:item.date)||isoDate(new Date());if(type==='recurring'){frequencySelect.value=item.frequency;intervalInput.value=item.interval||2;}}updateIntervalField();dialog.showModal();}
 document.getElementById('addRecurring').addEventListener('click',()=>openDialog('recurring')); document.getElementById('addVariable').addEventListener('click',()=>openDialog('variable'));
 frequencySelect.addEventListener('change', updateIntervalField);
-document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingItemIndex!==null){item.color=recurring[editingItemIndex].color;recurring[editingItemIndex]=item;}else recurring.push(item);}else{item.date=startInput.value;if(editingItemIndex!==null){item.color=variables[editingItemIndex].color;variables[editingItemIndex]=item;}else variables.push(item);}renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');showToast(editingItemIndex===null?'Item added to your forecast.':itemType==='recurring'?'Recurring item updated.':'One-time change updated.');});
+document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingItemIndex!==null){item.color=recurring[editingItemIndex].color;recurring[editingItemIndex]=item;}else recurring.push(item);}else{item.date=startInput.value;if(editingItemIndex!==null){item.color=variables[editingItemIndex].color;variables[editingItemIndex]=item;}else variables.push(item);}renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');drawChart();showToast(editingItemIndex===null?'Item added to your forecast.':itemType==='recurring'?'Recurring item updated.':'One-time change updated.');});
 document.getElementById('recurringList').addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
@@ -113,6 +202,7 @@ document.getElementById('recurringList').addEventListener('click', event => {
   if (button.dataset.action === 'delete' && window.confirm(`Delete ${recurring[index].name}?`)) {
     recurring.splice(index, 1);
     renderCards(recurring, 'recurringList');
+    drawChart();
     showToast('Recurring item deleted.');
   }
 });
@@ -124,6 +214,7 @@ document.getElementById('variableList').addEventListener('click', event => {
   if (button.dataset.action === 'delete' && window.confirm(`Delete ${variables[index].name}?`)) {
     variables.splice(index, 1);
     renderCards(variables, 'variableList');
+    drawChart();
     showToast('One-time change deleted.');
   }
 });
