@@ -1,6 +1,7 @@
 :root { --ink:#151515; --paper:#f5f1e8; --white:#fffefa; --lime:#d9ff45; --blue:#3759f0; --red:#f04444; --green:#0a7d4f; --muted:#706e68; --line:#151515; --shadow:5px 5px 0 #151515; }
 * { box-sizing:border-box; }
 body { margin:0; color:var(--ink); background:var(--paper); font-family:Arial, Helvetica, sans-serif; }
+body:not(.page-ready) > :not(#welcomeDialog):not(script) { visibility:hidden; }
 button, input, select { font:inherit; }
 button { cursor:pointer; }
 .topbar { height:76px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; background:var(--lime); border-bottom:3px solid var(--ink); }
@@ -28,3 +29,18 @@ dialog { width:min(430px,calc(100% - 30px)); padding:0; border:3px solid var(--i
 @media(max-width:1100px){.dashboard{grid-template-columns:240px 1fr}.variables-panel{grid-column:1/-1;position:static;min-height:0}.variables-panel .card-list{grid-template-columns:repeat(2,1fr)}.tip-box{display:none}}
 @media(max-width:760px){.topbar{padding:0 12px}.current-balance span{display:none}.dashboard{display:flex;flex-direction:column;padding:10px}.constants-panel,.variables-panel{position:static;min-height:0;width:100%}.workspace{width:100%}.chart-controls{flex-wrap:wrap}.range-buttons{margin-left:0}.metric-row{display:none}.calendar-panel{overflow:auto}.weekdays,.calendar-grid{min-width:620px}.day{min-height:70px}}
 .dialog-copy { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }.audit-expected { display:flex; align-items:center; justify-content:space-between; padding:14px; border:2px solid var(--ink); background:var(--lime); }.audit-expected span,.audit-result span { font-size:9px; font-weight:900; letter-spacing:.08em; }.audit-expected span strong { display:block; margin-top:3px; }.audit-expected b { font-size:22px; }.money-input { display:flex; align-items:center; border:2px solid var(--ink); background:white; }.money-input span { padding-left:11px; font-size:18px; font-weight:900; }.money-input input { border:0; padding-left:5px; outline:none; }.money-input:focus-within { outline:3px solid var(--lime); }.audit-result { padding:14px; border:2px solid var(--ink); background:#eeeae0; }.audit-result strong { float:right; }.audit-result p { clear:both; margin:9px 0 0; font-size:11px; color:var(--muted); }.audit-result.over { border-left:8px solid var(--green); }.audit-result.under { border-left:8px solid var(--red); }
+.welcome-dialog { width:min(820px,calc(100% - 30px)); background:var(--paper); }
+.welcome-dialog::backdrop { background:var(--paper); }
+.welcome-dialog form { padding:32px; gap:24px; }
+.welcome-mark { display:grid; place-items:center; width:54px; height:54px; background:var(--ink); color:var(--lime); font-weight:900; font-size:18px; }
+.welcome-copy h1 { margin:6px 0 10px; font-size:36px; line-height:1; }
+.welcome-copy > p:last-child { max-width:620px; margin:0; color:var(--muted); line-height:1.5; }
+.welcome-options { display:grid; grid-template-columns:1fr 46px 1fr; border-top:2px solid var(--ink); padding-top:24px; }
+.welcome-options section { display:grid; align-content:start; gap:14px; }.welcome-options h2 { margin:0; font-size:18px; }
+.welcome-options label { display:grid; gap:6px; font-size:10px; font-weight:900; }
+.welcome-options label > input { border:2px solid var(--ink); padding:11px; text-transform:uppercase; letter-spacing:.14em; font-weight:900; }
+.or-divider { display:grid; place-items:center; position:relative; font-size:9px; font-weight:900; }.or-divider:before { content:""; position:absolute; top:0; bottom:0; border-left:1px solid #aaa; }.or-divider span { z-index:1; padding:8px 0; background:var(--paper); }
+.local-note { margin:0; padding-top:16px; border-top:2px solid var(--ink); color:var(--muted); font-size:11px; font-weight:700; }
+.form-error { min-height:14px; margin:0; color:#c51f1f; font-size:11px; font-weight:800; }
+.page-code-box { padding:18px; border:2px solid var(--ink); background:var(--lime); }.page-code-box span { display:block; font-size:9px; font-weight:900; letter-spacing:.12em; }.page-code-box strong { display:block; margin:7px 0; font-size:28px; letter-spacing:.14em; }.page-code-box p { margin:0; font-size:11px; }.danger-button { color:#b71919; }
+@media(max-width:600px){.welcome-dialog form{padding:22px}.welcome-copy h1{font-size:29px}.welcome-options{grid-template-columns:1fr;gap:18px}.or-divider{display:none}}

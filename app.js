@@ -1,19 +1,34 @@
-const recurring = [
-  { name: 'Pay', amount: 1250, frequency: 'biweekly', start: '2026-08-13', color: '#14a467' },
-  { name: 'Rent', amount: -1150, frequency: 'monthly', start: '2026-08-28', color: '#3759f0' },
-  { name: 'Insurance', amount: -2000, frequency: 'custom-months', interval: 6, start: '2026-08-15', color: '#eaa81d' },
-  { name: 'Electric bill', amount: -200, frequency: 'monthly', start: '2026-09-10', color: '#f05f85' },
-  { name: 'Weekly spending', amount: -150, frequency: 'weekly', start: '2026-08-11', color: '#8b55df' }
-];
-const variables = [
-  { name: 'Overtime pay audit', amount: 819.74, date: '2026-07-01', color: '#14a467' },
-  { name: 'Unexpected repair', amount: -408.38, date: '2026-07-16', color: '#f04444' }
-];
-const transactions = [
-  ['Jun 30', 'Weekly spending', -150, 2033.82], ['Jul 1', 'Overtime pay audit', 819.74, 2853.56],
-  ['Jul 2', 'Pay', 1250, 4103.56], ['Jul 7', 'Weekly spending', -150, 3953.56],
-  ['Jul 10', 'Electric bill', -200, 3753.56], ['Jul 14', 'Weekly spending', -150, 3603.56]
-];
+const ACTIVE_PAGE_KEY = 'balanceBlock.activePage';
+const pageKey = code => `balanceBlock.page.${code}`;
+let activePageCode = localStorage.getItem(ACTIVE_PAGE_KEY) || '';
+let savedPage = activePageCode ? readPage(activePageCode) : null;
+let recurring = savedPage?.recurring || [];
+let variables = savedPage?.variables || [];
+const transactions = [];
+
+function readPage(code) {
+  try { return JSON.parse(localStorage.getItem(pageKey(code)) || 'null'); }
+  catch { return null; }
+}
+
+function generatePageCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const values = new Uint8Array(8);
+  crypto.getRandomValues(values);
+  const raw = [...values].map(value => alphabet[value % alphabet.length]).join('');
+  return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+}
+
+function savePage() {
+  if (!activePageCode) return;
+  localStorage.setItem(pageKey(activePageCode), JSON.stringify({
+    version: 1,
+    startingBalance: getStartingBalance(),
+    recurring,
+    variables
+  }));
+  localStorage.setItem(ACTIVE_PAGE_KEY, activePageCode);
+}
 const frequencyLabels = {
   daily: 'Daily',
   'twice-weekly': 'Twice a week',
@@ -29,7 +44,9 @@ function renderCards(items, target) {
   document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${item.color}"><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(isVariableList ? formatStartDate(item.date) : `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}</small><div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
 }
 function renderTransactions() {
-  document.getElementById('transactionRows').innerHTML = transactions.map(row => `<tr><td>${row[0]}, 2026</td><td>${row[1]}</td><td class="${row[2] >= 0 ? 'positive' : 'negative'}">${money(row[2])}</td><td>${money(row[3])}</td></tr>`).join('');
+  document.getElementById('transactionRows').innerHTML = transactions.length
+    ? transactions.map(row => `<tr><td>${row[0]}</td><td>${row[1]}</td><td class="${row[2] >= 0 ? 'positive' : 'negative'}">${money(row[2])}</td><td>${money(row[3])}</td></tr>`).join('')
+    : '<tr><td colspan="4">No upcoming activity yet. Add a recurring item or one-time change to get started.</td></tr>';
 }
 const startOfMonth = date => new Date(date.getFullYear(), date.getMonth(), 1);
 let calendarDate = startOfMonth(new Date());
@@ -66,6 +83,10 @@ function renderCalendar() {
   }).join('');
 }
 const startingBalanceInput = document.getElementById('startingBalance');
+const todayForForecast = new Date();
+document.getElementById('forecastFrom').value = isoDate(todayForForecast);
+document.getElementById('forecastTo').value = isoDate(new Date(todayForForecast.getFullYear() + 1, todayForForecast.getMonth(), todayForForecast.getDate()));
+if (savedPage) startingBalanceInput.value = savedPage.startingBalance ?? 0;
 const getStartingBalance = () => Number.isFinite(startingBalanceInput.valueAsNumber) ? startingBalanceInput.valueAsNumber : 0;
 const parseDate = value => new Date(`${value}T00:00:00`);
 const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
@@ -182,12 +203,54 @@ function drawChart() {
   document.getElementById('forecastHigh').textContent = money(high);
   document.getElementById('headerBalance').textContent = money(getStartingBalance());
 }
-renderCards(recurring,'recurringList'); renderCards(variables,'variableList'); renderTransactions(); renderCalendar(); drawChart();
+function renderPage() {
+  renderCards(recurring,'recurringList'); renderCards(variables,'variableList'); renderTransactions(); renderCalendar(); drawChart();
+}
+renderPage();
+
+const welcomeDialog = document.getElementById('welcomeDialog');
+function enterPage() {
+  document.body.classList.add('page-ready');
+  if (welcomeDialog.open) welcomeDialog.close();
+  renderPage();
+}
+if (savedPage) enterPage();
+else welcomeDialog.showModal();
+
+document.getElementById('welcomeForm').addEventListener('submit', event => {
+  event.preventDefault();
+  activePageCode = generatePageCode();
+  while (readPage(activePageCode)) activePageCode = generatePageCode();
+  recurring = [];
+  variables = [];
+  startingBalanceInput.value = document.getElementById('welcomeBalance').value || '0';
+  savePage();
+  enterPage();
+});
+document.getElementById('welcomeCode').addEventListener('input', event => {
+  const raw = event.target.value.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 8);
+  event.target.value = raw.length > 4 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
+});
+document.getElementById('openSavedPage').addEventListener('click', () => {
+  const code = document.getElementById('welcomeCode').value.trim().toUpperCase();
+  const page = readPage(code);
+  if (!page) {
+    document.getElementById('welcomeError').textContent = 'That page is not saved in this browser.';
+    return;
+  }
+  activePageCode = code;
+  savedPage = page;
+  recurring = page.recurring || [];
+  variables = page.variables || [];
+  startingBalanceInput.value = page.startingBalance ?? 0;
+  savePage();
+  enterPage();
+});
 
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');const from=parseDate(document.getElementById('forecastFrom').value);const month=from.getMonth()+Number(button.dataset.range);const lastDay=new Date(from.getFullYear(),month+1,0).getDate();const to=new Date(from.getFullYear(),month,Math.min(from.getDate(),lastDay));document.getElementById('forecastTo').value=isoDate(to);drawChart();}));
 document.getElementById('forecastFrom').addEventListener('change', drawChart);
 document.getElementById('forecastTo').addEventListener('change', drawChart);
-startingBalanceInput.addEventListener('input', drawChart);
+startingBalanceInput.addEventListener('input', () => { drawChart(); savePage(); });
 const dialog=document.getElementById('itemDialog'); let itemType='recurring';
 const frequencySelect = document.getElementById('itemFrequency');
 const intervalField = document.getElementById('intervalField');
@@ -213,7 +276,7 @@ function formatStartDate(value) {
 function openDialog(type, index=null){itemType=type;editingItemIndex=index;document.getElementById('dialogTitle').textContent=index===null?(type==='recurring'?'Add recurring item':'Add one-time change'):(type==='recurring'?'Edit recurring item':'Edit one-time change');document.getElementById('saveItem').textContent=index===null?'SAVE ITEM':'SAVE CHANGES';document.getElementById('itemForm').reset();document.getElementById('recurrenceFields').hidden=type!=='recurring';dateLabel.textContent=type==='recurring'?'STARTS':'OCCURS ON';frequencySelect.value='monthly';intervalInput.value='2';startInput.value=isoDate(new Date());if(index!==null){const item=(type==='recurring'?recurring:variables)[index];document.getElementById('itemName').value=item.name;document.getElementById('itemAmount').value=item.amount;startInput.value=(type==='recurring'?item.start:item.date)||isoDate(new Date());if(type==='recurring'){frequencySelect.value=item.frequency;intervalInput.value=item.interval||2;}}updateIntervalField();dialog.showModal();}
 document.getElementById('addRecurring').addEventListener('click',()=>openDialog('recurring')); document.getElementById('addVariable').addEventListener('click',()=>openDialog('variable'));
 frequencySelect.addEventListener('change', updateIntervalField);
-document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingItemIndex!==null){item.color=recurring[editingItemIndex].color;recurring[editingItemIndex]=item;}else recurring.push(item);}else{item.date=startInput.value;if(editingItemIndex!==null){item.color=variables[editingItemIndex].color;variables[editingItemIndex]=item;}else variables.push(item);}renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');drawChart();showToast(editingItemIndex===null?'Item added to your forecast.':itemType==='recurring'?'Recurring item updated.':'One-time change updated.');});
+document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingItemIndex!==null){item.color=recurring[editingItemIndex].color;recurring[editingItemIndex]=item;}else recurring.push(item);}else{item.date=startInput.value;if(editingItemIndex!==null){item.color=variables[editingItemIndex].color;variables[editingItemIndex]=item;}else variables.push(item);}savePage();renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');drawChart();showToast(editingItemIndex===null?'Item added to your forecast.':itemType==='recurring'?'Recurring item updated.':'One-time change updated.');});
 document.getElementById('recurringList').addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
@@ -221,6 +284,7 @@ document.getElementById('recurringList').addEventListener('click', event => {
   if (button.dataset.action === 'edit') openDialog('recurring', index);
   if (button.dataset.action === 'delete' && window.confirm(`Delete ${recurring[index].name}?`)) {
     recurring.splice(index, 1);
+    savePage();
     renderCards(recurring, 'recurringList');
     drawChart();
     showToast('Recurring item deleted.');
@@ -233,6 +297,7 @@ document.getElementById('variableList').addEventListener('click', event => {
   if (button.dataset.action === 'edit') openDialog('variable', index);
   if (button.dataset.action === 'delete' && window.confirm(`Delete ${variables[index].name}?`)) {
     variables.splice(index, 1);
+    savePage();
     renderCards(variables, 'variableList');
     drawChart();
     showToast('One-time change deleted.');
@@ -278,6 +343,7 @@ document.getElementById('saveAudit').addEventListener('click', event => {
   const difference = updateAuditResult();
   if (difference === 0) { event.preventDefault(); return; }
   variables.push({ name: 'Balance audit adjustment', amount: difference, date: isoDate(new Date()), color: difference > 0 ? '#14a467' : '#f04444' });
+  savePage();
   renderCards(variables, 'variableList');
   drawChart();
   showToast(`${money(Math.abs(difference))} ${difference > 0 ? 'credit' : 'charge'} added for today.`);
@@ -291,4 +357,16 @@ document.getElementById('nextMonth').addEventListener('click', () => changeCalen
 document.getElementById('todayMonth').addEventListener('click', () => {
   calendarDate = startOfMonth(new Date());
   renderCalendar();
+});
+
+const settingsDialog = document.getElementById('settingsDialog');
+document.getElementById('openSettings').addEventListener('click', () => {
+  document.getElementById('pageCode').textContent = activePageCode;
+  settingsDialog.showModal();
+});
+document.getElementById('clearPage').addEventListener('click', () => {
+  if (!window.confirm('Clear this page and all of its locally saved data?')) return;
+  localStorage.removeItem(pageKey(activePageCode));
+  localStorage.removeItem(ACTIVE_PAGE_KEY);
+  window.location.reload();
 });
