@@ -176,7 +176,10 @@ function forecastChanges(from, to, includeFrom = false) {
   }));
   variables.forEach((item, sourceIndex) => {
     const date = parseDate(item.date);
-    if ((includeFrom ? date >= from : date > from) && date <= to) addChange(date, { ...item, sourceType: 'variable', sourceIndex }, 'One-time');
+    // One-time changes represent activity on a specific day. Include changes on
+    // the forecast's first day so a balance audit performed "today" immediately
+    // reconciles the opening point of the graph.
+    if (date >= from && date <= to) addChange(date, { ...item, sourceType: 'variable', sourceIndex }, 'One-time');
   });
   return changes;
 }
@@ -193,10 +196,13 @@ function setRecurringAmountFromDate(item, date, amount) {
 
 function projectionPoints(from, to) {
   const changes = forecastChanges(from, to);
-  let balance = getStartingBalance();
+  const anchorKey = isoDate(from);
+  const anchorChange = changes.get(anchorKey);
+  let balance = getStartingBalance() + (anchorChange?.amount || 0);
+  changes.delete(anchorKey);
   const adjustmentFor = date => pointAdjustments.filter(item => item.date === isoDate(date)).reduce((sum, item) => sum + item.amount, 0);
   const startingAdjustment = adjustmentFor(from);
-  return [{ date: from, balance: balance + startingAdjustment, events: [{ name: 'Starting balance', amount: balance, type: 'Starting point' }, ...(startingAdjustment ? [{ name: 'Point-only adjustment', amount: startingAdjustment, type: 'Adjustment' }] : [])] }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
+  return [{ date: from, balance: balance + startingAdjustment, events: [{ name: 'Starting balance', amount: getStartingBalance(), type: 'Starting point' }, ...(anchorChange?.events || []), ...(startingAdjustment ? [{ name: 'Point-only adjustment', amount: startingAdjustment, type: 'Adjustment' }] : [])] }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
     balance += change.amount;
     const adjustment = adjustmentFor(parseDate(date));
     return { date: parseDate(date), balance: balance + adjustment, events: [...change.events, ...(adjustment ? [{ name: 'Point-only adjustment', amount: adjustment, type: 'Adjustment' }] : [])] };
@@ -503,7 +509,7 @@ const auditActual = document.getElementById('auditActual');
 const auditResult = document.getElementById('auditResult');
 let expectedAuditBalance = getStartingBalance();
 function balanceOn(date) {
-  if (date <= balanceAnchorDate) return getStartingBalance();
+  if (date < balanceAnchorDate) return getStartingBalance();
   return projectionPoints(balanceAnchorDate, date).at(-1).balance;
 }
 function updateAuditResult() {
