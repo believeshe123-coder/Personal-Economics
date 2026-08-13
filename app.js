@@ -181,6 +181,16 @@ function forecastChanges(from, to, includeFrom = false) {
   return changes;
 }
 
+function setRecurringAmountFromDate(item, date, amount) {
+  item.amountChanges = [
+    ...(item.amountChanges || []).filter(change => change.date < date),
+    { date, amount }
+  ];
+  item.overrides = Object.fromEntries(
+    Object.entries(item.overrides || {}).filter(([overrideDate]) => overrideDate < date)
+  );
+}
+
 function projectionPoints(from, to) {
   const changes = forecastChanges(from, to);
   let balance = getStartingBalance();
@@ -313,7 +323,7 @@ document.getElementById('savePoint').addEventListener('click', event => {
     const item = recurring[action.sourceIndex];
     const date = isoDate(selectedPoint.date);
     if (appliesToFuture) {
-      item.amountChanges = [...(item.amountChanges || []).filter(change => change.date !== date), { date, amount: newAmount }];
+      setRecurringAmountFromDate(item, date, newAmount);
     } else {
       item.overrides = { ...(item.overrides || {}), [date]: newAmount };
     }
