@@ -117,7 +117,11 @@ function renderCalendar() {
 }
 const startingBalanceInput = document.getElementById('startingBalance');
 const todayForForecast = new Date();
-document.getElementById('forecastFrom').value = isoDate(todayForForecast);
+const forecastFromInput = document.getElementById('forecastFrom');
+const todayForecastDate = () => isoDate(new Date());
+forecastFromInput.value = todayForecastDate();
+forecastFromInput.min = todayForecastDate();
+forecastFromInput.max = todayForecastDate();
 document.getElementById('forecastTo').value = isoDate(new Date(todayForForecast.getFullYear() + 1, todayForForecast.getMonth(), todayForForecast.getDate()));
 if (savedPage) startingBalanceInput.value = savedPage.startingBalance ?? 0;
 const getStartingBalance = () => Number.isFinite(startingBalanceInput.valueAsNumber) ? startingBalanceInput.valueAsNumber : 0;
@@ -228,7 +232,12 @@ function linearTrend(points) {
 
 function drawChart() {
   const svg = document.getElementById('balanceChart'), width = 900, height = 270, pad = { l: 62, r: 24, t: 22, b: 38 };
-  const from = parseDate(document.getElementById('forecastFrom').value);
+  // The entered balance is the account balance today, so every forecast must
+  // be anchored to today rather than moving that balance to an arbitrary date.
+  forecastFromInput.value = todayForecastDate();
+  forecastFromInput.min = forecastFromInput.value;
+  forecastFromInput.max = forecastFromInput.value;
+  const from = parseDate(forecastFromInput.value);
   const to = parseDate(document.getElementById('forecastTo').value);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) return;
   const points = projectionPoints(from, to);
@@ -447,7 +456,7 @@ document.getElementById('welcomeImportFile').addEventListener('change', importBa
 document.getElementById('importPageFile').addEventListener('change', importBackupFile);
 
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');const from=parseDate(document.getElementById('forecastFrom').value);const month=from.getMonth()+Number(button.dataset.range);const lastDay=new Date(from.getFullYear(),month+1,0).getDate();const to=new Date(from.getFullYear(),month,Math.min(from.getDate(),lastDay));document.getElementById('forecastTo').value=isoDate(to);drawChart();}));
-document.getElementById('forecastFrom').addEventListener('change', drawChart);
+forecastFromInput.addEventListener('change', drawChart);
 document.getElementById('forecastTo').addEventListener('change', drawChart);
 startingBalanceInput.addEventListener('input', () => { drawChart(); savePage(); });
 const dialog=document.getElementById('itemDialog'); let itemType='recurring';
