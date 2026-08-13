@@ -1,5 +1,6 @@
 const ACTIVE_PAGE_KEY = 'balanceBlock.activePage';
 const pageKey = code => `balanceBlock.page.${code}`;
+const validPageCode = value => /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(value || '');
 
 function decodeSharedPage(value) {
   try {
@@ -15,10 +16,11 @@ function decodeSharedPage(value) {
 }
 
 const sharedPage = decodeSharedPage(window.location.hash);
-let activePageCode = sharedPage ? generatePageCode() : localStorage.getItem(ACTIVE_PAGE_KEY) || '';
+let activePageCode = sharedPage ? (validPageCode(sharedPage.pageCode) ? sharedPage.pageCode : generatePageCode()) : localStorage.getItem(ACTIVE_PAGE_KEY) || '';
 let savedPage = sharedPage || (activePageCode ? readPage(activePageCode) : null);
 let recurring = savedPage?.recurring || [];
 let variables = savedPage?.variables || [];
+let pointAdjustments = savedPage?.pointAdjustments || [];
 
 function readPage(code) {
   try { return JSON.parse(localStorage.getItem(pageKey(code)) || 'null'); }
@@ -35,17 +37,16 @@ function generatePageCode() {
 
 function savePage() {
   if (!activePageCode) return;
-  localStorage.setItem(pageKey(activePageCode), JSON.stringify({
-    version: 1,
-    startingBalance: getStartingBalance(),
-    recurring,
-    variables
-  }));
+  localStorage.setItem(pageKey(activePageCode), JSON.stringify(pageData()));
   localStorage.setItem(ACTIVE_PAGE_KEY, activePageCode);
 }
 
+function pageData() {
+  return { version: 2, pageCode: activePageCode, startingBalance: getStartingBalance(), recurring, variables, pointAdjustments };
+}
+
 function shareLink() {
-  const page = JSON.stringify({ version: 1, startingBalance: getStartingBalance(), recurring, variables });
+  const page = JSON.stringify(pageData());
   const bytes = new TextEncoder().encode(page);
   let binary = '';
   bytes.forEach(byte => { binary += String.fromCharCode(byte); });
@@ -178,9 +179,12 @@ function forecastChanges(from, to, includeFrom = false) {
 function projectionPoints(from, to) {
   const changes = forecastChanges(from, to);
   let balance = getStartingBalance();
-  return [{ date: from, balance, events: [{ name: 'Starting balance', amount: balance, type: 'Starting point' }] }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
+  const adjustmentFor = date => pointAdjustments.filter(item => item.date === isoDate(date)).reduce((sum, item) => sum + item.amount, 0);
+  const startingAdjustment = adjustmentFor(from);
+  return [{ date: from, balance: balance + startingAdjustment, events: [{ name: 'Starting balance', amount: balance, type: 'Starting point' }, ...(startingAdjustment ? [{ name: 'Point-only adjustment', amount: startingAdjustment, type: 'Adjustment' }] : [])] }, ...[...changes].sort(([a], [b]) => a.localeCompare(b)).map(([date, change]) => {
     balance += change.amount;
-    return { date: parseDate(date), balance, events: change.events };
+    const adjustment = adjustmentFor(parseDate(date));
+    return { date: parseDate(date), balance: balance + adjustment, events: [...change.events, ...(adjustment ? [{ name: 'Point-only adjustment', amount: adjustment, type: 'Adjustment' }] : [])] };
   })];
 }
 
@@ -262,8 +266,9 @@ let selectedPoint = null;
 function updatePointChange() {
   const newBalance = pointBalanceInput.valueAsNumber;
   const difference = Number.isFinite(newBalance) && selectedPoint ? newBalance - selectedPoint.balance : 0;
+  const appliesToFuture = document.querySelector('input[name="pointScope"]:checked').value === 'future';
   document.getElementById('pointChange').textContent = Number.isFinite(newBalance) && selectedPoint
-    ? `${difference >= 0 ? 'Add' : 'Subtract'} ${money(Math.abs(difference))} from this date forward.`
+    ? `${difference >= 0 ? 'Add' : 'Subtract'} ${money(Math.abs(difference))} ${appliesToFuture ? 'from this date forward' : 'at this point only'}.`
     : '';
   return difference;
 }
@@ -272,18 +277,23 @@ function openPointDialog(point) {
   document.getElementById('pointDate').textContent = point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
   document.getElementById('pointCurrentBalance').textContent = money(point.balance);
   pointBalanceInput.value = point.balance.toFixed(2);
+  document.querySelector('input[name="pointScope"][value="single"]').checked = true;
   updatePointChange();
   pointDialog.showModal();
   pointBalanceInput.select();
 }
 pointBalanceInput.addEventListener('input', updatePointChange);
+document.querySelectorAll('input[name="pointScope"]').forEach(input => input.addEventListener('change', updatePointChange));
 document.getElementById('savePoint').addEventListener('click', event => {
   if (!document.getElementById('pointForm').reportValidity()) { event.preventDefault(); return; }
   const difference = Math.round(updatePointChange() * 100) / 100;
-  if (selectedPoint.events[0]?.type === 'Starting point') {
+  const appliesToFuture = document.querySelector('input[name="pointScope"]:checked').value === 'future';
+  if (appliesToFuture && selectedPoint.events[0]?.type === 'Starting point') {
     startingBalanceInput.value = pointBalanceInput.valueAsNumber.toFixed(2);
   } else if (difference !== 0) {
-    variables.push({ name: 'Graph point adjustment', amount: difference, date: isoDate(selectedPoint.date), color: difference > 0 ? '#14a467' : '#f04444' });
+    const adjustment = { name: 'Graph point adjustment', amount: difference, date: isoDate(selectedPoint.date), color: difference > 0 ? '#14a467' : '#f04444' };
+    if (appliesToFuture) variables.push(adjustment);
+    else pointAdjustments.push(adjustment);
   }
   savePage();
   renderCards(variables, 'variableList');
@@ -298,7 +308,10 @@ function enterPage() {
   if (welcomeDialog.open) welcomeDialog.close();
   renderPage();
 }
-if (savedPage) enterPage();
+if (savedPage) {
+  enterPage();
+  if (sharedPage) showToast(`Saved page ${activePageCode} imported to this browser.`);
+}
 else welcomeDialog.showModal();
 
 document.getElementById('welcomeForm').addEventListener('submit', event => {
@@ -307,6 +320,7 @@ document.getElementById('welcomeForm').addEventListener('submit', event => {
   while (readPage(activePageCode)) activePageCode = generatePageCode();
   recurring = [];
   variables = [];
+  pointAdjustments = [];
   startingBalanceInput.value = document.getElementById('welcomeBalance').value || '0';
   savePage();
   enterPage();
@@ -325,14 +339,43 @@ document.getElementById('openSavedPage').addEventListener('click', () => {
     document.getElementById('welcomeError').textContent = 'That page is not saved here, or the share link is invalid.';
     return;
   }
-  activePageCode = importedPage ? generatePageCode() : code;
+  activePageCode = importedPage ? (validPageCode(importedPage.pageCode) ? importedPage.pageCode : generatePageCode()) : code;
   savedPage = page;
   recurring = page.recurring || [];
   variables = page.variables || [];
+  pointAdjustments = page.pointAdjustments || [];
   startingBalanceInput.value = page.startingBalance ?? 0;
   savePage();
   enterPage();
+  if (importedPage) showToast(`Saved page ${activePageCode} imported to this browser.`);
 });
+
+function importPage(page) {
+  if (!page || !Number.isFinite(Number(page.startingBalance)) || !Array.isArray(page.recurring) || !Array.isArray(page.variables)) throw new Error('Invalid backup');
+  activePageCode = validPageCode(page.pageCode) ? page.pageCode : generatePageCode();
+  recurring = page.recurring;
+  variables = page.variables;
+  pointAdjustments = Array.isArray(page.pointAdjustments) ? page.pointAdjustments : [];
+  startingBalanceInput.value = Number(page.startingBalance).toFixed(2);
+  savePage();
+  enterPage();
+  if (settingsDialog.open) settingsDialog.close();
+  showToast(`Backup imported as page ${activePageCode}.`);
+}
+
+async function importBackupFile(event) {
+  const [file] = event.target.files;
+  if (!file) return;
+  try {
+    importPage(JSON.parse(await file.text()));
+  } catch {
+    showToast('That backup file is invalid.');
+  }
+  event.target.value = '';
+}
+
+document.getElementById('welcomeImportFile').addEventListener('change', importBackupFile);
+document.getElementById('importPageFile').addEventListener('change', importBackupFile);
 
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');const from=parseDate(document.getElementById('forecastFrom').value);const month=from.getMonth()+Number(button.dataset.range);const lastDay=new Date(from.getFullYear(),month+1,0).getDate();const to=new Date(from.getFullYear(),month,Math.min(from.getDate(),lastDay));document.getElementById('forecastTo').value=isoDate(to);drawChart();}));
 document.getElementById('forecastFrom').addEventListener('change', drawChart);
@@ -458,25 +501,63 @@ document.querySelectorAll('.collapse-button').forEach(button => {
 });
 
 const settingsDialog = document.getElementById('settingsDialog');
+const savedPageLink = document.getElementById('savedPageLink');
 document.getElementById('headerPageCode').addEventListener('click', async () => {
+  const url = shareLink();
+  document.getElementById('pageCode').textContent = activePageCode;
+  savedPageLink.value = url;
+  if (!settingsDialog.open) settingsDialog.showModal();
   try {
-    await navigator.clipboard.writeText(shareLink());
-    showToast('Cross-browser link copied.');
+    await navigator.clipboard.writeText(url);
+    showToast('Saved page link copied and shown in Settings.');
   } catch {
-    showToast('Open settings to copy your cross-browser link.');
+    showToast('Open settings to copy a snapshot link.');
   }
 });
 document.getElementById('openSettings').addEventListener('click', () => {
   document.getElementById('pageCode').textContent = activePageCode;
+  savedPageLink.value = shareLink();
   settingsDialog.showModal();
 });
-document.getElementById('copyShareLink').addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(shareLink());
-    showToast('Cross-browser link copied. It contains a snapshot of your data.');
-  } catch {
-    window.prompt('Copy this cross-browser link:', shareLink());
+document.getElementById('sharePage').addEventListener('click', async () => {
+  const url = shareLink();
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: `Balance Block ${activePageCode}`, text: 'Open my saved Balance Block page.', url });
+      return;
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+    }
   }
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('Saved page link copied. Send it to your phone and open it there.');
+  } catch {
+    window.prompt('Copy and send this saved page link to your phone:', url);
+  }
+});
+document.getElementById('copyShareLink').addEventListener('click', async () => {
+  const url = shareLink();
+  savedPageLink.value = url;
+  try {
+    await navigator.clipboard.writeText(url);
+    savedPageLink.focus();
+    savedPageLink.select();
+    showToast('Saved page link copied and shown below.');
+  } catch {
+    savedPageLink.focus();
+    savedPageLink.select();
+    showToast('Link shown below. Select it and copy manually.');
+  }
+});
+document.getElementById('exportPage').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(pageData(), null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `balance-block-${activePageCode}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast(`Backup for ${activePageCode} exported.`);
 });
 document.getElementById('clearPage').addEventListener('click', () => {
   if (!window.confirm('Clear this page and all of its locally saved data?')) return;
