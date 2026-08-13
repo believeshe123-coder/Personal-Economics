@@ -1,7 +1,22 @@
 const ACTIVE_PAGE_KEY = 'balanceBlock.activePage';
 const pageKey = code => `balanceBlock.page.${code}`;
-let activePageCode = localStorage.getItem(ACTIVE_PAGE_KEY) || '';
-let savedPage = activePageCode ? readPage(activePageCode) : null;
+
+function decodeSharedPage(value) {
+  try {
+    const encoded = value.includes('#page=') ? value.split('#page=')[1] : value.replace(/^#?page=/, '');
+    if (!encoded) return null;
+    const bytes = Uint8Array.from(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')), character => character.charCodeAt(0));
+    const page = JSON.parse(new TextDecoder().decode(bytes));
+    if (!page || !Number.isFinite(Number(page.startingBalance)) || !Array.isArray(page.recurring) || !Array.isArray(page.variables)) return null;
+    return page;
+  } catch {
+    return null;
+  }
+}
+
+const sharedPage = decodeSharedPage(window.location.hash);
+let activePageCode = sharedPage ? generatePageCode() : localStorage.getItem(ACTIVE_PAGE_KEY) || '';
+let savedPage = sharedPage || (activePageCode ? readPage(activePageCode) : null);
 let recurring = savedPage?.recurring || [];
 let variables = savedPage?.variables || [];
 
@@ -27,6 +42,15 @@ function savePage() {
     variables
   }));
   localStorage.setItem(ACTIVE_PAGE_KEY, activePageCode);
+}
+
+function shareLink() {
+  const page = JSON.stringify({ version: 1, startingBalance: getStartingBalance(), recurring, variables });
+  const bytes = new TextEncoder().encode(page);
+  let binary = '';
+  bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+  const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${window.location.origin}${window.location.pathname}${window.location.search}#page=${encoded}`;
 }
 const frequencyLabels = {
   daily: 'Daily',
@@ -96,6 +120,10 @@ document.getElementById('forecastFrom').value = isoDate(todayForForecast);
 document.getElementById('forecastTo').value = isoDate(new Date(todayForForecast.getFullYear() + 1, todayForForecast.getMonth(), todayForForecast.getDate()));
 if (savedPage) startingBalanceInput.value = savedPage.startingBalance ?? 0;
 const getStartingBalance = () => Number.isFinite(startingBalanceInput.valueAsNumber) ? startingBalanceInput.valueAsNumber : 0;
+if (sharedPage) {
+  savePage();
+  history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+}
 const parseDate = value => new Date(`${value}T00:00:00`);
 const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 const balanceAnchorDate = parseDate(document.getElementById('forecastFrom').value);
@@ -284,17 +312,20 @@ document.getElementById('welcomeForm').addEventListener('submit', event => {
   enterPage();
 });
 document.getElementById('welcomeCode').addEventListener('input', event => {
+  if (event.target.value.includes('#page=') || event.target.value.startsWith('page=')) return;
   const raw = event.target.value.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 8);
   event.target.value = raw.length > 4 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
 });
 document.getElementById('openSavedPage').addEventListener('click', () => {
-  const code = document.getElementById('welcomeCode').value.trim().toUpperCase();
-  const page = readPage(code);
+  const enteredValue = document.getElementById('welcomeCode').value.trim();
+  const importedPage = decodeSharedPage(enteredValue);
+  const code = enteredValue.toUpperCase();
+  const page = importedPage || readPage(code);
   if (!page) {
-    document.getElementById('welcomeError').textContent = 'That page is not saved in this browser.';
+    document.getElementById('welcomeError').textContent = 'That page is not saved here, or the share link is invalid.';
     return;
   }
-  activePageCode = code;
+  activePageCode = importedPage ? generatePageCode() : code;
   savedPage = page;
   recurring = page.recurring || [];
   variables = page.variables || [];
@@ -429,15 +460,23 @@ document.querySelectorAll('.collapse-button').forEach(button => {
 const settingsDialog = document.getElementById('settingsDialog');
 document.getElementById('headerPageCode').addEventListener('click', async () => {
   try {
-    await navigator.clipboard.writeText(activePageCode);
-    showToast('Page code copied.');
+    await navigator.clipboard.writeText(shareLink());
+    showToast('Cross-browser link copied.');
   } catch {
-    showToast(`Your page code is ${activePageCode}.`);
+    showToast('Open settings to copy your cross-browser link.');
   }
 });
 document.getElementById('openSettings').addEventListener('click', () => {
   document.getElementById('pageCode').textContent = activePageCode;
   settingsDialog.showModal();
+});
+document.getElementById('copyShareLink').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(shareLink());
+    showToast('Cross-browser link copied. It contains a snapshot of your data.');
+  } catch {
+    window.prompt('Copy this cross-browser link:', shareLink());
+  }
 });
 document.getElementById('clearPage').addEventListener('click', () => {
   if (!window.confirm('Clear this page and all of its locally saved data?')) return;
