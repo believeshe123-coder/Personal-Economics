@@ -87,7 +87,7 @@
           <div class="section-actions"><button class="button button-dark" id="addVariable">+ ADD</button><button type="button" class="collapse-button" aria-label="Minimize one-time changes" aria-expanded="true">−</button></div>
         </div>
         <div id="variableList" class="card-list"></div>
-        <button class="text-link">VIEW ALL ONE-TIME CHANGES <span>→</span></button>
+        <button class="text-link" id="viewArchivedVariables">VIEW ARCHIVED <span id="archivedVariableCount">0 →</span></button>
         <div class="tip-box"><strong>KEEP IT REAL.</strong><p>Review surprise spending weekly to keep your forecast honest.</p></div>
       </aside>
     </main>
@@ -153,6 +153,15 @@
         <div class="dialog-actions"><button value="cancel" formnovalidate class="button button-light">CANCEL</button><button value="default" class="button button-dark" id="saveAudit">ADD ADJUSTMENT</button></div>
       </form>
     </dialog>
+    <dialog id="archiveDialog" class="archive-dialog">
+      <form method="dialog">
+        <div class="dialog-header"><div><p class="eyebrow">ONE-TIME CHANGES</p><h2>Archive</h2></div><button value="cancel" aria-label="Close">×</button></div>
+        <p class="dialog-copy">Archived changes stay in your page history, but no longer appear in your active list or forecast.</p>
+        <div id="archivedVariableList" class="card-list archive-list"></div>
+        <p id="archiveEmpty" class="archive-empty">Nothing archived yet.</p>
+        <div class="dialog-actions"><button value="cancel" class="button button-dark">DONE</button></div>
+      </form>
+    </dialog>
     <dialog id="welcomeDialog" class="welcome-dialog">
       <form id="welcomeForm">
         <div class="welcome-mark" aria-hidden="true">BB</div>
@@ -195,6 +204,6 @@
       </form>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260813-10"></script>
+    <script src="app.js?v=20260813-11"></script>
   </body>
 </html>

@@ -20,6 +20,7 @@ let activePageCode = sharedPage ? (validPageCode(sharedPage.pageCode) ? sharedPa
 let savedPage = sharedPage || (activePageCode ? readPage(activePageCode) : null);
 let recurring = savedPage?.recurring || [];
 let variables = savedPage?.variables || [];
+let archivedVariables = savedPage?.archivedVariables || [];
 let pointAdjustments = savedPage?.pointAdjustments || [];
 
 function readPage(code) {
@@ -42,7 +43,7 @@ function savePage() {
 }
 
 function pageData() {
-  return { version: 2, pageCode: activePageCode, startingBalance: getStartingBalance(), recurring, variables, pointAdjustments };
+  return { version: 3, pageCode: activePageCode, startingBalance: getStartingBalance(), recurring, variables, archivedVariables, pointAdjustments };
 }
 
 function shareLink() {
@@ -66,7 +67,9 @@ const itemColor = value => /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#3759f
 
 function renderCards(items, target) {
   const isVariableList = target === 'variableList';
-  document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${itemColor(item.color)}"><input class="item-color" type="color" value="${itemColor(item.color)}" data-index="${index}" aria-label="Change the point color for ${escapeHTML(item.name)}" title="Change point color" /><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(isVariableList ? formatStartDate(item.date) : `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}</small><div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
+  const today = isoDate(new Date());
+  document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card${isVariableList && item.date < today ? ' is-past' : ''}" style="--card-color:${itemColor(item.color)}"><input class="item-color" type="color" value="${itemColor(item.color)}" data-index="${index}" aria-label="Change the point color for ${escapeHTML(item.name)}" title="Change point color" /><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(isVariableList ? formatStartDate(item.date) : `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}${isVariableList && item.date < today ? ' • PAST' : ''}</small><div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button>${isVariableList ? `<button type="button" data-action="archive" data-index="${index}" aria-label="Archive ${escapeHTML(item.name)}">ARCHIVE</button>` : ''}<button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
+  if (isVariableList) renderArchiveCount();
 }
 function renderTransactions() {
   const from = parseDate(document.getElementById('forecastFrom').value);
@@ -400,6 +403,7 @@ document.getElementById('welcomeForm').addEventListener('submit', event => {
   while (readPage(activePageCode)) activePageCode = generatePageCode();
   recurring = [];
   variables = [];
+  archivedVariables = [];
   pointAdjustments = [];
   startingBalanceInput.value = document.getElementById('welcomeBalance').value || '0';
   savePage();
@@ -423,6 +427,7 @@ document.getElementById('openSavedPage').addEventListener('click', () => {
   savedPage = page;
   recurring = page.recurring || [];
   variables = page.variables || [];
+  archivedVariables = page.archivedVariables || [];
   pointAdjustments = page.pointAdjustments || [];
   startingBalanceInput.value = page.startingBalance ?? 0;
   savePage();
@@ -435,6 +440,7 @@ function importPage(page) {
   activePageCode = validPageCode(page.pageCode) ? page.pageCode : generatePageCode();
   recurring = page.recurring;
   variables = page.variables;
+  archivedVariables = Array.isArray(page.archivedVariables) ? page.archivedVariables : [];
   pointAdjustments = Array.isArray(page.pointAdjustments) ? page.pointAdjustments : [];
   startingBalanceInput.value = Number(page.startingBalance).toFixed(2);
   savePage();
@@ -505,6 +511,12 @@ document.getElementById('variableList').addEventListener('click', event => {
   if (!button) return;
   const index = Number(button.dataset.index);
   if (button.dataset.action === 'edit') openDialog('variable', index);
+  if (button.dataset.action === 'archive') {
+    archivedVariables.unshift({ ...variables[index], archivedAt: new Date().toISOString() });
+    variables.splice(index, 1);
+    savePage(); renderCards(variables, 'variableList'); drawChart();
+    showToast('One-time change archived.');
+  }
   if (button.dataset.action === 'delete' && window.confirm(`Delete ${variables[index].name}?`)) {
     variables.splice(index, 1);
     savePage();
@@ -513,6 +525,34 @@ document.getElementById('variableList').addEventListener('click', event => {
     showToast('One-time change deleted.');
   }
 });
+const archiveDialog = document.getElementById('archiveDialog');
+function renderArchiveCount() {
+  document.getElementById('archivedVariableCount').textContent = `${archivedVariables.length} →`;
+}
+function renderArchive() {
+  document.getElementById('archivedVariableList').innerHTML = archivedVariables.map((item, index) => `<article class="item-card archived-card" style="--card-color:${itemColor(item.color)}"><span class="item-color archive-color" aria-hidden="true"></span><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(formatStartDate(item.date))}</small><div class="item-actions"><button type="button" data-action="restore" data-index="${index}" aria-label="Restore ${escapeHTML(item.name)}">RESTORE</button><button type="button" data-action="delete" data-index="${index}" aria-label="Permanently delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
+  document.getElementById('archiveEmpty').hidden = archivedVariables.length > 0;
+  renderArchiveCount();
+}
+document.getElementById('viewArchivedVariables').addEventListener('click', () => { renderArchive(); archiveDialog.showModal(); });
+document.getElementById('archivedVariableList').addEventListener('click', event => {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+  const index = Number(button.dataset.index);
+  const item = archivedVariables[index];
+  if (!item) return;
+  if (button.dataset.action === 'restore') {
+    const { archivedAt, ...restored } = item;
+    variables.push(restored); archivedVariables.splice(index, 1);
+    savePage(); renderCards(variables, 'variableList'); renderArchive(); drawChart();
+    showToast('One-time change restored.');
+  }
+  if (button.dataset.action === 'delete' && window.confirm(`Permanently delete ${item.name}?`)) {
+    archivedVariables.splice(index, 1); savePage(); renderArchive();
+    showToast('Archived change deleted.');
+  }
+});
+
 function updateItemColor(event, items, target, itemLabel) {
   if (!event.target.matches('.item-color')) return;
   const index = Number(event.target.dataset.index);
