@@ -628,6 +628,11 @@ document.getElementById('exportPage').addEventListener('click', () => {
   URL.revokeObjectURL(link.href);
   showToast(`Backup for ${activePageCode} exported.`);
 });
+document.getElementById('closePage').addEventListener('click', () => {
+  savePage();
+  localStorage.removeItem(ACTIVE_PAGE_KEY);
+  window.location.reload();
+});
 document.getElementById('clearPage').addEventListener('click', () => {
   if (!window.confirm('Clear this page and all of its locally saved data?')) return;
   localStorage.removeItem(pageKey(activePageCode));
