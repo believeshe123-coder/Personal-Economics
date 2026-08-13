@@ -13,7 +13,7 @@
         <span>BALANCE BLOCK</span>
       </a>
       <div class="header-actions">
-        <button type="button" class="page-code-button" id="headerPageCode" aria-label="Copy cross-browser share link">
+        <button type="button" class="page-code-button" id="headerPageCode" aria-label="Copy a snapshot link">
           <span>PAGE CODE</span><strong id="headerPageCodeValue">—</strong><small>SHARE</small>
         </button>
         <div class="current-balance"><span>Starting balance</span><strong id="headerBalance">$0.00</strong></div>
@@ -118,11 +118,16 @@
     <dialog id="pointDialog" class="point-dialog">
       <form method="dialog" id="pointForm">
         <div class="dialog-header"><div><p class="eyebrow">FORECAST POINT</p><h2>Adjust this point</h2></div><button value="cancel" formnovalidate aria-label="Close">×</button></div>
-        <p class="dialog-copy">Set the balance you want at this point. The forecast after this date will update by the same difference.</p>
+        <p class="dialog-copy">Set the balance you want, then choose whether the adjustment applies only here or carries forward.</p>
         <div class="point-summary"><span id="pointDate"></span><strong id="pointCurrentBalance"></strong></div>
         <label>NEW BALANCE
           <div class="money-input"><span>$</span><input id="pointBalance" required type="number" step="0.01" inputmode="decimal" /></div>
         </label>
+        <fieldset class="point-scope">
+          <legend>APPLY CHANGE TO</legend>
+          <label><input type="radio" name="pointScope" value="single" checked /><span><strong>JUST THIS POINT</strong><small>Keep every later forecast balance unchanged.</small></span></label>
+          <label><input type="radio" name="pointScope" value="future" /><span><strong>THIS AND FUTURE POINTS</strong><small>Carry the difference into every later balance.</small></span></label>
+        </fieldset>
         <p class="point-change" id="pointChange" aria-live="polite"></p>
         <div class="dialog-actions"><button value="cancel" formnovalidate class="button button-light">CANCEL</button><button value="default" class="button button-dark" id="savePoint">UPDATE POINT</button></div>
       </form>
@@ -151,7 +156,7 @@
         <div class="welcome-copy">
           <p class="eyebrow">YOUR MONEY, YOUR PAGE</p>
           <h1>Start with a clean block.</h1>
-          <p>No sample transactions. No preset variables. Set a starting balance, reopen a page saved on this device, or paste a share link from another browser.</p>
+          <p>No sample transactions. No preset variables. Set a starting balance, reopen a page saved on this device, or import a snapshot from another browser.</p>
         </div>
         <div class="welcome-options">
           <section>
@@ -164,23 +169,28 @@
           <div class="or-divider"><span>OR</span></div>
           <section>
             <h2>Open a saved page</h2>
-            <label>PAGE CODE OR SHARE LINK<input id="welcomeCode" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX or paste a link" /></label>
+            <label>PAGE CODE OR SAVED LINK<input id="welcomeCode" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX or paste a saved link" /></label>
             <button type="button" class="button button-light" id="openSavedPage">OPEN PAGE</button>
+            <label class="button button-light file-button">IMPORT BACKUP FILE<input id="welcomeImportFile" type="file" accept="application/json,.json" /></label>
             <p class="form-error" id="welcomeError" role="alert"></p>
           </section>
         </div>
-        <p class="local-note">🔒 Data stays local. Use a share link to move a private snapshot to another browser.</p>
+        <p class="local-note">🔒 Data stays local. Use the saved link or an exported backup to copy this page—including its page code—to another browser.</p>
       </form>
     </dialog>
     <dialog id="settingsDialog" class="settings-dialog">
       <form method="dialog">
         <div class="dialog-header"><div><p class="eyebrow">LOCAL PAGE</p><h2>Settings</h2></div><button value="cancel" aria-label="Close">×</button></div>
-        <div class="page-code-box"><span>YOUR PAGE CODE</span><strong id="pageCode"></strong><p>Use this short code on this browser, or copy a private snapshot link for another browser.</p></div>
-        <button type="button" class="button button-dark" id="copyShareLink">COPY CROSS-BROWSER LINK</button>
+        <div class="page-code-box"><span>PAGE CODE</span><strong id="pageCode"></strong><p>Saved links and backup files keep this same code when opened in another browser.</p></div>
+        <div class="sync-note"><strong>SEND TO YOUR PHONE</strong><p>Tap Send to phone, choose Messages, email, AirDrop, or another sharing app, then open the link on your phone. The complete current page will be saved there with the same code.</p></div>
+        <button type="button" class="button button-dark" id="sharePage">SEND TO PHONE</button>
+        <button type="button" class="button button-dark" id="copyShareLink">COPY SAVED PAGE LINK</button>
+        <label class="saved-link-field">SAVED PAGE LINK<textarea id="savedPageLink" rows="3" readonly spellcheck="false" aria-describedby="savedLinkHelp"></textarea><small id="savedLinkHelp">This is the same link copied to your clipboard. You can also select it here manually.</small></label>
+        <div class="transfer-actions"><button type="button" class="button button-light" id="exportPage">EXPORT BACKUP</button><label class="button button-light file-button">IMPORT BACKUP<input id="importPageFile" type="file" accept="application/json,.json" /></label></div>
         <button type="button" class="button button-light danger-button" id="clearPage">CLEAR THIS PAGE</button>
       </form>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260812-7"></script>
+    <script src="app.js?v=20260813-5"></script>
   </body>
 </html>
