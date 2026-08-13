@@ -203,6 +203,23 @@ function projectionPoints(from, to) {
   })];
 }
 
+function linearTrend(points) {
+  if (!points.length) return null;
+  if (points.length === 1) return { start: points[0].balance, end: points[0].balance };
+  const origin = points[0].date.getTime();
+  const times = points.map(point => (point.date.getTime() - origin) / 86400000);
+  const meanTime = times.reduce((sum, value) => sum + value, 0) / times.length;
+  const meanBalance = points.reduce((sum, point) => sum + point.balance, 0) / points.length;
+  const variance = times.reduce((sum, value) => sum + (value - meanTime) ** 2, 0);
+  const slope = variance
+    ? points.reduce((sum, point, index) => sum + (times[index] - meanTime) * (point.balance - meanBalance), 0) / variance
+    : 0;
+  return {
+    start: meanBalance + slope * (times[0] - meanTime),
+    end: meanBalance + slope * (times.at(-1) - meanTime)
+  };
+}
+
 function drawChart() {
   const svg = document.getElementById('balanceChart'), width = 900, height = 270, pad = { l: 62, r: 24, t: 22, b: 38 };
   const from = parseDate(document.getElementById('forecastFrom').value);
@@ -211,12 +228,19 @@ function drawChart() {
   const points = projectionPoints(from, to);
   const values = points.map(point => point.balance);
   const low = Math.min(...values), high = Math.max(...values);
-  const spread = Math.max(100, high - low), chartMin = Math.floor((low - spread * .12) / 500) * 500, chartMax = Math.ceil((high + spread * .12) / 500) * 500;
+  const spread = Math.max(100, high - low);
+  const chartMin = Math.floor((low - spread * .12) / 500) * 500;
+  const chartMax = Math.max(low < 0 ? 0 : -Infinity, Math.ceil((high + spread * .12) / 500) * 500);
   const duration = to - from;
   const x = date => pad.l + (date - from) / duration * (width - pad.l - pad.r);
   const y = value => height - pad.b - (value - chartMin) / (chartMax - chartMin) * (height - pad.t - pad.b);
   const formatAxisMoney = value => `${value < 0 ? '-' : ''}$${Math.abs(value) >= 1000 ? `${(Math.abs(value) / 1000).toFixed(Math.abs(value) % 1000 ? 1 : 0)}k` : Math.abs(value)}`;
   let html = '';
+  if (chartMin < 0) {
+    const zeroY = y(0);
+    html += `<rect class="negative-zone" x="${pad.l}" y="${zeroY}" width="${width-pad.l-pad.r}" height="${height-pad.b-zeroY}"/>`;
+    html += `<text class="negative-zone-label" x="${width-pad.r-8}" y="${Math.min(height-pad.b-8, zeroY+16)}" text-anchor="end">NEGATIVE BALANCE</text>`;
+  }
   for (let i = 0; i <= 4; i += 1) {
     const value = chartMin + (chartMax - chartMin) * i / 4;
     html += `<line x1="${pad.l}" y1="${y(value)}" x2="${width-pad.r}" y2="${y(value)}" stroke="#c8c5bd"/><text x="8" y="${y(value)+4}" font-size="10" fill="#666">${formatAxisMoney(value)}</text>`;
@@ -225,8 +249,12 @@ function drawChart() {
     const date = new Date(from.getTime() + duration * i / 6), xx = x(date);
     html += `<line x1="${xx}" y1="${pad.t}" x2="${xx}" y2="${height-pad.b}" stroke="#e0ddd5"/><text x="${xx}" y="${height-12}" text-anchor="middle" font-size="9" fill="#666">${date.toLocaleDateString('en-US', { month: 'short', day: duration < 1000*60*60*24*100 ? 'numeric' : undefined }).toUpperCase()}</text>`;
   }
+  if (chartMin <= 0 && chartMax >= 0) {
+    html += `<line class="zero-line" x1="${pad.l}" y1="${y(0)}" x2="${width-pad.r}" y2="${y(0)}"/><text class="zero-label" x="${pad.l+8}" y="${y(0)-7}">$0 · ZERO</text>`;
+  }
   const line = points.map(point => `${x(point.date)},${y(point.balance)}`).join(' ');
-  html += `<line x1="${x(from)}" y1="${y(values[0])}" x2="${x(to)}" y2="${y(values.at(-1))}" stroke="#0a7d4f" stroke-width="2" stroke-dasharray="8 7"/><polyline points="${line}" fill="none" stroke="#151515" stroke-width="3"/>`;
+  const trend = linearTrend(points);
+  html += `<line class="trend-line" x1="${x(points[0].date)}" y1="${y(trend.start)}" x2="${x(points.at(-1).date)}" y2="${y(trend.end)}"><title>Best-fit trend based on all ${points.length} forecast data points</title></line><polyline points="${line}" fill="none" stroke="#151515" stroke-width="3"/>`;
   points.forEach((point, index) => {
     const eventSummary = point.events.map(item => `${item.type} ${item.name} ${money(item.amount)}`).join(', ');
     const label = `${point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}: ${eventSummary}. Balance ${money(point.balance)}`;
