@@ -13,8 +13,8 @@
         <span>BALANCE BLOCK</span>
       </a>
       <div class="header-actions">
-        <button type="button" class="page-code-button" id="headerPageCode" aria-label="Copy page code">
-          <span>PAGE CODE</span><strong id="headerPageCodeValue">—</strong><small>COPY</small>
+        <button type="button" class="page-code-button" id="headerPageCode" aria-label="Copy cross-browser share link">
+          <span>PAGE CODE</span><strong id="headerPageCodeValue">—</strong><small>SHARE</small>
         </button>
         <div class="current-balance"><span>Starting balance</span><strong id="headerBalance">$0.00</strong></div>
         <button class="icon-button" id="openSettings" aria-label="Open settings">⚙</button>
@@ -151,7 +151,7 @@
         <div class="welcome-copy">
           <p class="eyebrow">YOUR MONEY, YOUR PAGE</p>
           <h1>Start with a clean block.</h1>
-          <p>No sample transactions. No preset variables. Set a starting balance, or reopen a page saved on this device with its page code.</p>
+          <p>No sample transactions. No preset variables. Set a starting balance, reopen a page saved on this device, or paste a share link from another browser.</p>
         </div>
         <div class="welcome-options">
           <section>
@@ -164,22 +164,23 @@
           <div class="or-divider"><span>OR</span></div>
           <section>
             <h2>Open a saved page</h2>
-            <label>PAGE CODE<input id="welcomeCode" maxlength="9" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX" /></label>
+            <label>PAGE CODE OR SHARE LINK<input id="welcomeCode" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX or paste a link" /></label>
             <button type="button" class="button button-light" id="openSavedPage">OPEN PAGE</button>
             <p class="form-error" id="welcomeError" role="alert"></p>
           </section>
         </div>
-        <p class="local-note">🔒 Everything is saved locally in this browser.</p>
+        <p class="local-note">🔒 Data stays local. Use a share link to move a private snapshot to another browser.</p>
       </form>
     </dialog>
     <dialog id="settingsDialog" class="settings-dialog">
       <form method="dialog">
         <div class="dialog-header"><div><p class="eyebrow">LOCAL PAGE</p><h2>Settings</h2></div><button value="cancel" aria-label="Close">×</button></div>
-        <div class="page-code-box"><span>YOUR PAGE CODE</span><strong id="pageCode"></strong><p>Use this code to reopen your page on this browser.</p></div>
+        <div class="page-code-box"><span>YOUR PAGE CODE</span><strong id="pageCode"></strong><p>Use this short code on this browser, or copy a private snapshot link for another browser.</p></div>
+        <button type="button" class="button button-dark" id="copyShareLink">COPY CROSS-BROWSER LINK</button>
         <button type="button" class="button button-light danger-button" id="clearPage">CLEAR THIS PAGE</button>
       </form>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260812-6"></script>
+    <script src="app.js?v=20260812-7"></script>
   </body>
 </html>
