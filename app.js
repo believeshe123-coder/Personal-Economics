@@ -278,7 +278,8 @@ function drawChart() {
     const eventSummary = point.events.map(item => `${item.type} ${item.name} ${money(item.amount)}`).join(', ');
     const label = `${point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}: ${eventSummary}. Balance ${money(point.balance)}`;
     const pointColor = itemColor(point.events.find(event => event.color)?.color);
-    html += `<circle class="chart-point" data-index="${index}" cx="${x(point.date)}" cy="${y(point.balance)}" r="4" fill="#fff" stroke="${pointColor}" stroke-width="2" tabindex="0" role="img" aria-label="${escapeHTML(label)}"/>`;
+    const pointX = x(point.date), pointY = y(point.balance);
+    html += `<line class="chart-point" data-index="${index}" x1="${pointX}" y1="${pointY - 5}" x2="${pointX}" y2="${pointY + 5}" stroke="${pointColor}" stroke-width="3" tabindex="0" role="img" aria-label="${escapeHTML(label)}"/>`;
   });
   html += '<g class="chart-tooltip" visibility="hidden"><rect width="230" rx="2"/><text></text></g>';
   svg.innerHTML = html;
