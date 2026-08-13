@@ -62,10 +62,11 @@ const frequencyLabels = {
 };
 const money = value => `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 const escapeHTML = value => String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+const itemColor = value => /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#3759f0';
 
 function renderCards(items, target) {
   const isVariableList = target === 'variableList';
-  document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${item.color}"><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(isVariableList ? formatStartDate(item.date) : `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}</small><div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
+  document.getElementById(target).innerHTML = items.map((item, index) => `<article class="item-card" style="--card-color:${itemColor(item.color)}"><input class="item-color" type="color" value="${itemColor(item.color)}" data-index="${index}" aria-label="Change the point color for ${escapeHTML(item.name)}" title="Change point color" /><div class="item-top"><span>${escapeHTML(item.name)}</span><span class="${item.amount >= 0 ? 'positive' : 'negative'}">${money(item.amount)}</span></div><small>${escapeHTML(isVariableList ? formatStartDate(item.date) : `${formatFrequency(item)} • Starts ${formatStartDate(item.start)}`)}</small><div class="item-actions"><button type="button" data-action="edit" data-index="${index}" aria-label="Edit ${escapeHTML(item.name)}">EDIT</button><button type="button" data-action="delete" data-index="${index}" aria-label="Delete ${escapeHTML(item.name)}">DELETE</button></div></article>`).join('');
 }
 function renderTransactions() {
   const from = parseDate(document.getElementById('forecastFrom').value);
@@ -169,7 +170,7 @@ function forecastChanges(from, to, includeFrom = false) {
     const key = isoDate(date);
     const change = changes.get(key) || { amount: 0, events: [] };
     change.amount += item.amount;
-    change.events.push({ name: item.name, amount: item.amount, type, sourceType: item.sourceType, sourceIndex: item.sourceIndex });
+    change.events.push({ name: item.name, amount: item.amount, color: itemColor(item.color), type, sourceType: item.sourceType, sourceIndex: item.sourceIndex });
     changes.set(key, change);
   };
   recurring.forEach((item, sourceIndex) => recurringDates(item, includeFrom ? from : addDays(from, 1), to).forEach(date => {
@@ -273,7 +274,8 @@ function drawChart() {
   points.forEach((point, index) => {
     const eventSummary = point.events.map(item => `${item.type} ${item.name} ${money(item.amount)}`).join(', ');
     const label = `${point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}: ${eventSummary}. Balance ${money(point.balance)}`;
-    html += `<circle class="chart-point" data-index="${index}" cx="${x(point.date)}" cy="${y(point.balance)}" r="4" fill="#fff" stroke="#3759f0" stroke-width="2" tabindex="0" role="img" aria-label="${escapeHTML(label)}"/>`;
+    const pointColor = itemColor(point.events.find(event => event.color)?.color);
+    html += `<circle class="chart-point" data-index="${index}" cx="${x(point.date)}" cy="${y(point.balance)}" r="4" fill="#fff" stroke="${pointColor}" stroke-width="2" tabindex="0" role="img" aria-label="${escapeHTML(label)}"/>`;
   });
   html += '<g class="chart-tooltip" visibility="hidden"><rect width="230" rx="2"/><text></text></g>';
   svg.innerHTML = html;
@@ -511,6 +513,18 @@ document.getElementById('variableList').addEventListener('click', event => {
     showToast('One-time change deleted.');
   }
 });
+function updateItemColor(event, items, target, itemLabel) {
+  if (!event.target.matches('.item-color')) return;
+  const index = Number(event.target.dataset.index);
+  if (!items[index]) return;
+  items[index].color = itemColor(event.target.value);
+  savePage();
+  renderCards(items, target);
+  drawChart();
+  showToast(`${itemLabel} point color updated.`);
+}
+document.getElementById('recurringList').addEventListener('change', event => updateItemColor(event, recurring, 'recurringList', 'Recurring item'));
+document.getElementById('variableList').addEventListener('change', event => updateItemColor(event, variables, 'variableList', 'One-time change'));
 function showToast(message){const toast=document.getElementById('toast');toast.textContent=message;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}
 
 const auditDialog = document.getElementById('auditDialog');
