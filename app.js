@@ -165,13 +165,18 @@ function forecastChanges(from, to, includeFrom = false) {
     const key = isoDate(date);
     const change = changes.get(key) || { amount: 0, events: [] };
     change.amount += item.amount;
-    change.events.push({ name: item.name, amount: item.amount, type });
+    change.events.push({ name: item.name, amount: item.amount, type, sourceType: item.sourceType, sourceIndex: item.sourceIndex });
     changes.set(key, change);
   };
-  recurring.forEach(item => recurringDates(item, includeFrom ? from : addDays(from, 1), to).forEach(date => addChange(date, item, 'Recurring')));
-  variables.forEach(item => {
+  recurring.forEach((item, sourceIndex) => recurringDates(item, includeFrom ? from : addDays(from, 1), to).forEach(date => {
+    const dateKey = isoDate(date);
+    const futureChanges = (item.amountChanges || []).filter(change => change.date <= dateKey).sort((a, b) => a.date.localeCompare(b.date));
+    const amount = Object.hasOwn(item.overrides || {}, dateKey) ? item.overrides[dateKey] : (futureChanges.at(-1)?.amount ?? item.amount);
+    addChange(date, { ...item, amount, sourceType: 'recurring', sourceIndex }, 'Recurring');
+  }));
+  variables.forEach((item, sourceIndex) => {
     const date = parseDate(item.date);
-    if ((includeFrom ? date >= from : date > from) && date <= to) addChange(date, item, 'One-time');
+    if ((includeFrom ? date >= from : date > from) && date <= to) addChange(date, { ...item, sourceType: 'variable', sourceIndex }, 'One-time');
   });
   return changes;
 }
@@ -262,43 +267,63 @@ renderPage();
 
 const pointDialog = document.getElementById('pointDialog');
 const pointBalanceInput = document.getElementById('pointBalance');
+const pointActionSelect = document.getElementById('pointAction');
 let selectedPoint = null;
+const selectedAction = () => selectedPoint?.events.filter(event => event.sourceType)[Number(pointActionSelect.value)];
 function updatePointChange() {
-  const newBalance = pointBalanceInput.valueAsNumber;
-  const difference = Number.isFinite(newBalance) && selectedPoint ? newBalance - selectedPoint.balance : 0;
+  const action = selectedAction();
+  const newAmount = pointBalanceInput.valueAsNumber;
+  const difference = Number.isFinite(newAmount) && action ? newAmount - action.amount : 0;
   const appliesToFuture = document.querySelector('input[name="pointScope"]:checked').value === 'future';
-  document.getElementById('pointChange').textContent = Number.isFinite(newBalance) && selectedPoint
-    ? `${difference >= 0 ? 'Add' : 'Subtract'} ${money(Math.abs(difference))} ${appliesToFuture ? 'from this date forward' : 'at this point only'}.`
+  document.getElementById('pointChange').textContent = Number.isFinite(newAmount) && action
+    ? `${action.name} will change from ${money(action.amount)} to ${money(newAmount)}${action.sourceType === 'recurring' && appliesToFuture ? ' from this date forward' : ' on this date'}.`
     : '';
   return difference;
 }
+function loadSelectedAction() {
+  const action = selectedAction();
+  if (!action) return;
+  pointBalanceInput.value = action.amount.toFixed(2);
+  document.querySelector('.point-scope').hidden = action.sourceType !== 'recurring';
+  updatePointChange();
+  pointBalanceInput.select();
+}
 function openPointDialog(point) {
   selectedPoint = point;
+  const actions = point.events.filter(event => event.sourceType);
+  if (!actions.length) return;
   document.getElementById('pointDate').textContent = point.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
-  document.getElementById('pointCurrentBalance').textContent = money(point.balance);
-  pointBalanceInput.value = point.balance.toFixed(2);
+  document.getElementById('pointCurrentBalance').textContent = `${actions.length} ${actions.length === 1 ? 'ACTION' : 'ACTIONS'}`;
+  pointActionSelect.innerHTML = actions.map((action, index) => `<option value="${index}">${escapeHTML(action.name)} — ${money(action.amount)}</option>`).join('');
   document.querySelector('input[name="pointScope"][value="single"]').checked = true;
-  updatePointChange();
+  loadSelectedAction();
   pointDialog.showModal();
   pointBalanceInput.select();
 }
 pointBalanceInput.addEventListener('input', updatePointChange);
+pointActionSelect.addEventListener('change', loadSelectedAction);
 document.querySelectorAll('input[name="pointScope"]').forEach(input => input.addEventListener('change', updatePointChange));
 document.getElementById('savePoint').addEventListener('click', event => {
   if (!document.getElementById('pointForm').reportValidity()) { event.preventDefault(); return; }
+  const action = selectedAction();
+  const newAmount = Math.round(pointBalanceInput.valueAsNumber * 100) / 100;
   const difference = Math.round(updatePointChange() * 100) / 100;
   const appliesToFuture = document.querySelector('input[name="pointScope"]:checked').value === 'future';
-  if (appliesToFuture && selectedPoint.events[0]?.type === 'Starting point') {
-    startingBalanceInput.value = pointBalanceInput.valueAsNumber.toFixed(2);
-  } else if (difference !== 0) {
-    const adjustment = { name: 'Graph point adjustment', amount: difference, date: isoDate(selectedPoint.date), color: difference > 0 ? '#14a467' : '#f04444' };
-    if (appliesToFuture) variables.push(adjustment);
-    else pointAdjustments.push(adjustment);
+  if (difference !== 0 && action.sourceType === 'recurring') {
+    const item = recurring[action.sourceIndex];
+    const date = isoDate(selectedPoint.date);
+    if (appliesToFuture) {
+      item.amountChanges = [...(item.amountChanges || []).filter(change => change.date !== date), { date, amount: newAmount }];
+    } else {
+      item.overrides = { ...(item.overrides || {}), [date]: newAmount };
+    }
+  } else if (difference !== 0 && action.sourceType === 'variable') {
+    variables[action.sourceIndex].amount = newAmount;
   }
   savePage();
   renderCards(variables, 'variableList');
   drawChart();
-  showToast(difference === 0 ? 'Point was already at that balance.' : 'Forecast point updated.');
+  showToast(difference === 0 ? 'That action already has this amount.' : `${action.name} updated.`);
 });
 
 const welcomeDialog = document.getElementById('welcomeDialog');
@@ -406,7 +431,7 @@ function formatStartDate(value) {
 function openDialog(type, index=null){itemType=type;editingItemIndex=index;document.getElementById('dialogTitle').textContent=index===null?(type==='recurring'?'Add recurring item':'Add one-time change'):(type==='recurring'?'Edit recurring item':'Edit one-time change');document.getElementById('saveItem').textContent=index===null?'SAVE ITEM':'SAVE CHANGES';document.getElementById('itemForm').reset();document.getElementById('recurrenceFields').hidden=type!=='recurring';dateLabel.textContent=type==='recurring'?'STARTS':'OCCURS ON';frequencySelect.value='monthly';intervalInput.value='2';startInput.value=isoDate(new Date());if(index!==null){const item=(type==='recurring'?recurring:variables)[index];document.getElementById('itemName').value=item.name;document.getElementById('itemAmount').value=item.amount;startInput.value=(type==='recurring'?item.start:item.date)||isoDate(new Date());if(type==='recurring'){frequencySelect.value=item.frequency;intervalInput.value=item.interval||2;}}updateIntervalField();dialog.showModal();}
 document.getElementById('addRecurring').addEventListener('click',()=>openDialog('recurring')); document.getElementById('addVariable').addEventListener('click',()=>openDialog('variable'));
 frequencySelect.addEventListener('change', updateIntervalField);
-document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingItemIndex!==null){item.color=recurring[editingItemIndex].color;recurring[editingItemIndex]=item;}else recurring.push(item);}else{item.date=startInput.value;if(editingItemIndex!==null){item.color=variables[editingItemIndex].color;variables[editingItemIndex]=item;}else variables.push(item);}savePage();renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');drawChart();showToast(editingItemIndex===null?'Item added to your forecast.':itemType==='recurring'?'Recurring item updated.':'One-time change updated.');});
+document.getElementById('saveItem').addEventListener('click',e=>{const form=document.getElementById('itemForm');if(!form.reportValidity()){e.preventDefault();return;}const item={name:document.getElementById('itemName').value.trim(),amount:Number(document.getElementById('itemAmount').value),color:'#3759f0'};if(itemType==='recurring'){item.frequency=frequencySelect.value;item.interval=frequencySelect.value.startsWith('custom-')?Number(intervalInput.value):undefined;item.start=startInput.value;if(editingItemIndex!==null){item.color=recurring[editingItemIndex].color;item.overrides=recurring[editingItemIndex].overrides;item.amountChanges=recurring[editingItemIndex].amountChanges;recurring[editingItemIndex]=item;}else recurring.push(item);}else{item.date=startInput.value;if(editingItemIndex!==null){item.color=variables[editingItemIndex].color;variables[editingItemIndex]=item;}else variables.push(item);}savePage();renderCards(itemType==='recurring'?recurring:variables,itemType==='recurring'?'recurringList':'variableList');drawChart();showToast(editingItemIndex===null?'Item added to your forecast.':itemType==='recurring'?'Recurring item updated.':'One-time change updated.');});
 document.getElementById('recurringList').addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
