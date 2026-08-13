@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Balance Block</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260813-3" />
   </head>
   <body>
     <header class="topbar">
@@ -74,7 +74,7 @@
         <section class="panel transactions-panel">
           <div class="section-heading">
             <div><p class="eyebrow">TIMELINE</p><h2>Upcoming activity</h2></div>
-            <div class="section-actions"><button class="button button-light">EXPORT</button><button type="button" class="collapse-button" aria-label="Minimize upcoming activity" aria-expanded="true">−</button></div>
+            <div class="section-actions"><button type="button" class="collapse-button" aria-label="Minimize upcoming activity" aria-expanded="true">−</button></div>
           </div>
           <div class="table-wrap"><table><thead><tr><th>DATE</th><th>DESCRIPTION</th><th>CHANGE</th><th>BALANCE</th></tr></thead><tbody id="transactionRows"></tbody></table></div>
         </section>
@@ -88,7 +88,6 @@
         </div>
         <div id="variableList" class="card-list"></div>
         <button class="text-link" id="viewArchivedVariables">VIEW ARCHIVED <span id="archivedVariableCount">0 →</span></button>
-        <div class="tip-box"><strong>KEEP IT REAL.</strong><p>Review surprise spending weekly to keep your forecast honest.</p></div>
       </aside>
     </main>
 
@@ -96,7 +95,7 @@
       <form method="dialog" id="itemForm">
         <div class="dialog-header"><h2 id="dialogTitle">Add an item</h2><button value="cancel" formnovalidate aria-label="Close">×</button></div>
         <label>NAME<input id="itemName" required placeholder="e.g. Internet" /></label>
-        <label>AMOUNT<input id="itemAmount" required type="number" step="0.01" placeholder="0.00" /></label>
+        <label><span class="label-with-note">AMOUNT <small id="amountHint">Use a negative amount for money going out.</small></span><input id="itemAmount" required type="number" step="0.01" placeholder="0.00" aria-describedby="amountHint" /></label>
         <label><span id="itemDateLabel">STARTS</span><input id="itemStart" type="date" required /></label>
         <div id="recurrenceFields">
           <label>FREQUENCY
@@ -204,6 +203,6 @@
       </form>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260813-11"></script>
+    <script src="app.js?v=20260813-12"></script>
   </body>
 </html>

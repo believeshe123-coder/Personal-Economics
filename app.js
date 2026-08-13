@@ -264,10 +264,25 @@ function drawChart() {
     const value = chartMin + (chartMax - chartMin) * i / 4;
     html += `<line x1="${pad.l}" y1="${y(value)}" x2="${width-pad.r}" y2="${y(value)}" stroke="#c8c5bd"/><text x="8" y="${y(value)+4}" font-size="10" fill="#666">${formatAxisMoney(value)}</text>`;
   }
-  for (let i = 0; i <= 6; i += 1) {
-    const date = new Date(from.getTime() + duration * i / 6), xx = x(date);
-    html += `<line x1="${xx}" y1="${pad.t}" x2="${xx}" y2="${height-pad.b}" stroke="#e0ddd5"/><text x="${xx}" y="${height-12}" text-anchor="middle" font-size="9" fill="#666">${date.toLocaleDateString('en-US', { month: 'short', day: duration < 1000*60*60*24*100 ? 'numeric' : undefined }).toUpperCase()}</text>`;
+  // Divide the timeline into calendar months instead of evenly-sized date
+  // intervals. Labels sit in the middle of each visible month, including the
+  // partial months at either end of the selected forecast range.
+  const monthBoundaries = [from];
+  let monthBoundary = new Date(from.getFullYear(), from.getMonth() + 1, 1);
+  while (monthBoundary < to) {
+    monthBoundaries.push(monthBoundary);
+    monthBoundary = new Date(monthBoundary.getFullYear(), monthBoundary.getMonth() + 1, 1);
   }
+  monthBoundaries.push(to);
+  monthBoundaries.forEach(boundary => {
+    const xx = x(boundary);
+    html += `<line x1="${xx}" y1="${pad.t}" x2="${xx}" y2="${height-pad.b}" stroke="#e0ddd5"/>`;
+  });
+  monthBoundaries.slice(0, -1).forEach((start, index) => {
+    const end = monthBoundaries[index + 1];
+    const midpoint = new Date((start.getTime() + end.getTime()) / 2);
+    html += `<text x="${x(midpoint)}" y="${height-12}" text-anchor="middle" font-size="9" fill="#666">${start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}</text>`;
+  });
   if (chartMin <= 0 && chartMax >= 0) {
     html += `<line class="zero-line" x1="${pad.l}" y1="${y(0)}" x2="${width-pad.r}" y2="${y(0)}"/><text class="zero-label" x="${pad.l+8}" y="${y(0)-7}">$0 · ZERO</text>`;
   }
