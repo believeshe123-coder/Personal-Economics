@@ -44,7 +44,7 @@
             <label>STARTING BALANCE
               <div class="starting-balance-input"><span>$</span><input id="startingBalance" type="number" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Starting balance; defaults to zero" /></div>
             </label>
-            <label>FROM <input id="forecastFrom" type="date" /></label>
+            <label>FROM (TODAY) <input id="forecastFrom" type="date" readonly aria-label="Forecast start date, fixed to today" /></label>
             <label>TO <input id="forecastTo" type="date" /></label>
             <div class="range-buttons" aria-label="Forecast range">
               <button data-range="1">1M</button><button data-range="3">3M</button>
@@ -195,6 +195,6 @@
       </form>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260813-8"></script>
+    <script src="app.js?v=20260813-9"></script>
   </body>
 </html>
