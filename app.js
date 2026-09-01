@@ -22,6 +22,7 @@ let recurring = savedPage?.recurring || [];
 let variables = savedPage?.variables || [];
 let archivedVariables = savedPage?.archivedVariables || [];
 let pointAdjustments = savedPage?.pointAdjustments || [];
+let balanceDate = savedPage?.balanceDate || '';
 
 function readPage(code) {
   try { return JSON.parse(localStorage.getItem(pageKey(code)) || 'null'); }
@@ -43,7 +44,7 @@ function savePage() {
 }
 
 function pageData() {
-  return { version: 3, pageCode: activePageCode, startingBalance: getStartingBalance(), recurring, variables, archivedVariables, pointAdjustments };
+  return { version: 4, pageCode: activePageCode, startingBalance: getStartingBalance(), balanceDate, recurring, variables, archivedVariables, pointAdjustments };
 }
 
 function shareLink() {
@@ -135,7 +136,6 @@ if (sharedPage) {
 }
 const parseDate = value => new Date(`${value}T00:00:00`);
 const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-const balanceAnchorDate = parseDate(document.getElementById('forecastFrom').value);
 
 function recurringDates(item, from, to) {
   const dates = [];
@@ -184,12 +184,26 @@ function forecastChanges(from, to, includeFrom = false) {
   }));
   variables.forEach((item, sourceIndex) => {
     const date = parseDate(item.date);
-    // One-time changes represent activity on a specific day. Include changes on
-    // the forecast's first day so a balance audit performed "today" immediately
-    // reconciles the opening point of the graph.
-    if (date >= from && date <= to) addChange(date, { ...item, sourceType: 'variable', sourceIndex }, 'One-time');
+    if ((includeFrom ? date >= from : date > from) && date <= to) addChange(date, { ...item, sourceType: 'variable', sourceIndex }, 'One-time');
   });
   return changes;
+}
+
+function rollBalanceForward() {
+  const today = todayForecastDate();
+  if (!balanceDate) {
+    // Older saved pages did not record when their balance was current. Preserve
+    // that value as today's anchor rather than guessing at historical activity.
+    balanceDate = today;
+    savePage();
+    return;
+  }
+  if (balanceDate >= today) return;
+  const changes = forecastChanges(addDays(parseDate(balanceDate), 1), parseDate(today), true);
+  const carriedActivity = [...changes.values()].reduce((sum, change) => sum + change.amount, 0);
+  startingBalanceInput.value = (getStartingBalance() + carriedActivity).toFixed(2);
+  balanceDate = today;
+  savePage();
 }
 
 function setRecurringAmountFromDate(item, date, amount) {
@@ -235,6 +249,7 @@ function linearTrend(points) {
 }
 
 function drawChart() {
+  rollBalanceForward();
   const svg = document.getElementById('balanceChart'), width = 900, height = 270, pad = { l: 62, r: 24, t: 22, b: 38 };
   // The entered balance is the account balance today, so every forecast must
   // be anchored to today rather than moving that balance to an arbitrary date.
@@ -421,6 +436,7 @@ document.getElementById('welcomeForm').addEventListener('submit', event => {
   archivedVariables = [];
   pointAdjustments = [];
   startingBalanceInput.value = document.getElementById('welcomeBalance').value || '0';
+  balanceDate = todayForecastDate();
   savePage();
   enterPage();
 });
@@ -445,6 +461,7 @@ document.getElementById('openSavedPage').addEventListener('click', () => {
   archivedVariables = page.archivedVariables || [];
   pointAdjustments = page.pointAdjustments || [];
   startingBalanceInput.value = page.startingBalance ?? 0;
+  balanceDate = page.balanceDate || todayForecastDate();
   savePage();
   enterPage();
   if (importedPage) showToast(`Saved page ${activePageCode} imported to this browser.`);
@@ -458,6 +475,7 @@ function importPage(page) {
   archivedVariables = Array.isArray(page.archivedVariables) ? page.archivedVariables : [];
   pointAdjustments = Array.isArray(page.pointAdjustments) ? page.pointAdjustments : [];
   startingBalanceInput.value = Number(page.startingBalance).toFixed(2);
+  balanceDate = page.balanceDate || todayForecastDate();
   savePage();
   enterPage();
   if (settingsDialog.open) settingsDialog.close();
@@ -481,7 +499,7 @@ document.getElementById('importPageFile').addEventListener('change', importBacku
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');const from=parseDate(document.getElementById('forecastFrom').value);const month=from.getMonth()+Number(button.dataset.range);const lastDay=new Date(from.getFullYear(),month+1,0).getDate();const to=new Date(from.getFullYear(),month,Math.min(from.getDate(),lastDay));document.getElementById('forecastTo').value=isoDate(to);drawChart();}));
 forecastFromInput.addEventListener('change', drawChart);
 document.getElementById('forecastTo').addEventListener('change', drawChart);
-startingBalanceInput.addEventListener('input', () => { drawChart(); savePage(); });
+startingBalanceInput.addEventListener('input', () => { balanceDate = todayForecastDate(); drawChart(); savePage(); });
 const dialog=document.getElementById('itemDialog'); let itemType='recurring';
 const frequencySelect = document.getElementById('itemFrequency');
 const intervalField = document.getElementById('intervalField');
@@ -587,8 +605,9 @@ const auditActual = document.getElementById('auditActual');
 const auditResult = document.getElementById('auditResult');
 let expectedAuditBalance = getStartingBalance();
 function balanceOn(date) {
-  if (date < balanceAnchorDate) return getStartingBalance();
-  return projectionPoints(balanceAnchorDate, date).at(-1).balance;
+  const today = parseDate(todayForecastDate());
+  if (date <= today) return getStartingBalance();
+  return projectionPoints(today, date).at(-1).balance;
 }
 function updateAuditResult() {
   const hasValue = auditActual.value.trim() !== '' && Number.isFinite(auditActual.valueAsNumber);
@@ -601,7 +620,7 @@ function updateAuditResult() {
     : difference === 0
       ? 'You’re right on forecast. No adjustment is needed.'
       : `You’re ${money(Math.abs(difference))} ${difference > 0 ? 'over' : 'under'} today’s forecast.`;
-  document.getElementById('saveAudit').disabled = !hasValue || difference === 0;
+  document.getElementById('saveAudit').disabled = !hasValue;
   return difference;
 }
 document.getElementById('auditButton').addEventListener('click', () => {
@@ -618,12 +637,11 @@ auditActual.addEventListener('input', updateAuditResult);
 document.getElementById('saveAudit').addEventListener('click', event => {
   if (!document.getElementById('auditForm').reportValidity()) { event.preventDefault(); return; }
   const difference = updateAuditResult();
-  if (difference === 0) { event.preventDefault(); return; }
-  variables.push({ name: 'Balance audit adjustment', amount: difference, date: isoDate(new Date()), color: difference > 0 ? '#14a467' : '#f04444' });
+  startingBalanceInput.value = auditActual.valueAsNumber.toFixed(2);
+  balanceDate = todayForecastDate();
   savePage();
-  renderCards(variables, 'variableList');
   drawChart();
-  showToast(`${money(Math.abs(difference))} ${difference > 0 ? 'credit' : 'charge'} added for today.`);
+  showToast(difference === 0 ? 'Today’s balance confirmed.' : `Today’s balance updated by ${money(difference)}.`);
 });
 function changeCalendarMonth(offset) {
   calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + offset, 1);
